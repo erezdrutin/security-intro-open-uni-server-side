@@ -1,0 +1,9 @@
+2024-02-20 22:13:01,835 - main - INFO - Server started on port 8080. Waiting for connections...
+2024-02-20 22:13:33,239 - main - WARNING - Accepted connection from ('127.0.0.1', 55823)
+2024-02-20 22:13:33,240 - main - WARNING - Client has disconnected.
+2024-02-20 22:13:33,240 - main - WARNING - Connection closed.
+2024-02-20 22:33:49,790 - main - ERROR - Failed to convert the results of the query 'None' into the dataclass: 'MessagesServer'. Exception: execute() argument 1 must be str, not None
+2024-02-20 22:37:54,406 - main - ERROR - Failed to convert the results of the query 'None' into the dataclass: 'Server'. Exception: execute() argument 1 must be str, not None
+2024-02-20 22:37:54,408 - main - INFO - Server started on port 8080. Waiting for connections...
+2024-02-20 22:56:19,566 - main - ERROR - Failed to convert the results of the query 'None' into the dataclass: 'Server'. Exception: execute() argument 1 must be str, not None
+2024-02-20 22:56:19,566 - main - INFO - Server started on port 8080. Waiting for connections...
