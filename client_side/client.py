@@ -1,6 +1,8 @@
 from __future__ import annotations
 import logging
 import socket
+import struct
+
 from common.file_handler import FileHandler
 from common.models import Request
 
@@ -18,7 +20,9 @@ class Client:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((self.server_ip, self.server_port))
             sock.sendall(request.to_bytes())
-            print("Request sent successfully.")
+            self.logger.info("Request sent successfully.")
+            response = sock.recv(1024)
+            self.logger.info(f"Response received: {response}")
 
     @staticmethod
     def init_logger(logger_name: str = "main", log_path: str = "logs.log") \

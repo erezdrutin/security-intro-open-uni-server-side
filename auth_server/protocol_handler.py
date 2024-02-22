@@ -1,11 +1,10 @@
 import logging
 import socket
-import struct
 from auth_server.consts import SERVER_VERSION, RequestCodes, ResponseCodes
-from common.custom_exceptions import ClientDisconnectedError
 from common.db_handler import DatabaseHandler
 from common.models import Request, Response
 from common.base_protocol import BaseProtocol
+from common.message_utils import unpack_message_headers, unpack_message
 
 
 class ProtocolHandler(BaseProtocol):
@@ -24,45 +23,13 @@ class ProtocolHandler(BaseProtocol):
         disconnected abruptly, the method will raise ClientDisconnectedError.
         @param client_socket: A socket we can pass messages through.
         """
-        # The format string for struct.unpack:
-        # - 16s: client_id is a 16-byte string
-        # - B: version is a 1-byte unsigned char
-        # - H: code is a 2-byte unsigned short
-        # - I: payload_size is a 4-byte unsigned int
-        # Assuming the total size of the struct is:
-        # (16 + 1 + 2 + 4 = 23 bytes) without the payload.
-        format_string = ">16sBHI"
-        size_without_payload = struct.calcsize(format_string)
-        data = client_socket.recv(size_without_payload)
+        client_id, version, code, payload_size = unpack_message_headers(
+            client=client_socket)
 
-        # The client_side has disconnected, raise an error
-        if data == b'':
-            raise ClientDisconnectedError("Client has disconnected.")
-
-        # Unpack the data
-        client_id_bytes, version, code, payload_size = struct.unpack(
-            format_string, data)
-        # Save client_id as bytes and remove trailing null bytes
-        client_id = client_id_bytes.replace(b'\x00', b'')
-
-        try:
-            code = RequestCodes(code)
-        except ValueError:
-            code = RequestCodes.INVALID_CODE
-
-        # Read the payload based on the payload_size
-        payload = client_socket.recv(payload_size)
-
-        request = Request(client_id, version, code,
-                          payload, payload_size)
-
-        # Trigger handler based on request code + wrap with logger:
-        if version != SERVER_VERSION:
-            handler = self.request_handlers[RequestCodes.INVALID_VERSION]
-        elif request.code not in self.request_handlers:
-            handler = self.request_handlers[RequestCodes.INVALID_CODE]
-        else:
-            handler = self.request_handlers[request.code]
+        request, handler = unpack_message(
+            client=client_socket, client_id=client_id, codes=RequestCodes,
+            payload_size=payload_size, request_handlers=self.request_handlers,
+            server_version=SERVER_VERSION, code=code, version=version)
         handler = self.log_decorator(handler)
         handler(client_socket, request)
 
