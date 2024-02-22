@@ -1,8 +1,8 @@
 import logging
 import socket
 import struct
-from const import SERVER_VERSION, RequestCodes, ResponseCodes
-from custom_exceptions import ClientDisconnectedError
+from auth_server.consts import SERVER_VERSION, RequestCodes, ResponseCodes
+from common.custom_exceptions import ClientDisconnectedError
 from common.db_handler import DatabaseHandler
 from common.models import Request, Response
 from common.base_protocol import BaseProtocol
@@ -31,7 +31,7 @@ class ProtocolHandler(BaseProtocol):
         # - I: payload_size is a 4-byte unsigned int
         # Assuming the total size of the struct is:
         # (16 + 1 + 2 + 4 = 23 bytes) without the payload.
-        format_string = "16sBHI"
+        format_string = ">16sBHI"
         size_without_payload = struct.calcsize(format_string)
         data = client_socket.recv(size_without_payload)
 
@@ -40,11 +40,10 @@ class ProtocolHandler(BaseProtocol):
             raise ClientDisconnectedError("Client has disconnected.")
 
         # Unpack the data
-        client_id_bytes, version_byte, code, payload_size = struct.unpack(
+        client_id_bytes, version, code, payload_size = struct.unpack(
             format_string, data)
         # Save client_id as bytes and remove trailing null bytes
         client_id = client_id_bytes.replace(b'\x00', b'')
-        version = chr(version_byte)  # Converts ascii byte value to string
 
         try:
             code = RequestCodes(code)
@@ -55,7 +54,7 @@ class ProtocolHandler(BaseProtocol):
         payload = client_socket.recv(payload_size)
 
         request = Request(client_id, version, code,
-                          payload_size, payload)
+                          payload, payload_size)
 
         # Trigger handler based on request code + wrap with logger:
         if version != SERVER_VERSION:
@@ -77,7 +76,6 @@ class ProtocolHandler(BaseProtocol):
                             ResponseCodes.REGISTRATION_SUCCESS, client_id)
         bytes_res = response.to_bytes()
         client_socket.sendall(bytes_res)
-
 
     # @BaseProtocol.register_request(RequestCodes.REGISTRATION)
     # def _handle_registration(self, client_socket: socket.socket,

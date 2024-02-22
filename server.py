@@ -10,7 +10,7 @@ import socket
 import threading
 from typing import Dict, Any
 from const import DEFAULT_PORT
-from custom_exceptions import ClientDisconnectedError
+from common.custom_exceptions import ClientDisconnectedError
 from common.file_handler import FileHandler
 from common.db_handler import DatabaseHandler
 from common.models import ServerState

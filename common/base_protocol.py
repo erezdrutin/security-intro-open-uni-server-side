@@ -12,22 +12,23 @@ from the actual required methods using an "abstract" class as an interface.
 """
 import logging
 from typing import Callable, Dict
-
-from const import RequestCodes
 from common.models import Request, Response
+from common.consts import AuthRequestCodes, MessagesServerRequestCodes
+
+RequestCodesType = AuthRequestCodes | MessagesServerRequestCodes
 
 
 class BaseProtocol:
     # A dictionary that will hold a mapping between request codes and
     # matching methods to trigger.
-    request_handlers: Dict[RequestCodes, Callable] = {}
+    request_handlers: Dict[RequestCodesType, Callable] = {}
 
     def __init__(self, logger=None):
         self.logger = logger if logger else logging.getLogger(
             self.__class__.__name__)
 
     @classmethod
-    def register_request(cls, code: RequestCodes) -> Callable:
+    def register_request(cls, code: RequestCodesType) -> Callable:
         """
         A class method to allow registration of request handler methods with
         specific request codes.

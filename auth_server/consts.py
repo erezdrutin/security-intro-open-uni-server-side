@@ -1,8 +1,8 @@
 from common.consts import *
 
 # Request / Response Codes definitions:
-RequestCodes = MessagesServerRequestCodes
-ResponseCodes = MessagesServerResponseCodes
+RequestCodes = AuthRequestCodes
+ResponseCodes = AuthResponseCodes
 
 # DB related definitions:
 CLIENTS_TABLE = "clients"

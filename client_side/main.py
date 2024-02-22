@@ -12,9 +12,9 @@ def main():
         client_id=client.client_id,
         version=Config.VERSION,
         code=AuthRequestCodes.SERVER_REGISTRATION,
-        payload=b"Your payload here"
+        payload=b'hello world'
     )
-    client.send_request(request.to_bytes())
+    client.send_request(request)
 
 
 if __name__ == "__main__":

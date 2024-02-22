@@ -8,7 +8,7 @@ from enum import Enum
 
 # General consts for protocol and file handling:
 DEFAULT_PORT = 1256
-SERVER_VERSION = '24'
+SERVER_VERSION = 24
 FILES_STORAGE_FOLDER = "./storage"
 FILES_TABLE = "files"
 

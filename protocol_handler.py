@@ -23,7 +23,7 @@ import struct
 from datetime import datetime
 from const import SERVER_VERSION, RequestCodes, ResponseCodes, \
     CLIENTS_NAME_SIZE, CLIENTS_AES_KEY_SIZE, FILES_STORAGE_FOLDER
-from custom_exceptions import ClientDisconnectedError
+from common.custom_exceptions import ClientDisconnectedError
 from common.db_handler import DatabaseHandler
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP

@@ -2,6 +2,7 @@ from __future__ import annotations
 import logging
 import socket
 from common.file_handler import FileHandler
+from common.models import Request
 
 
 class Client:
@@ -13,10 +14,10 @@ class Client:
         self.client_id = client_id
         self.logger = logger
 
-    def send_request(self, request: bytes) -> None:
+    def send_request(self, request: Request) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((self.server_ip, self.server_port))
-            sock.sendall(request)
+            sock.sendall(request.to_bytes())
             print("Request sent successfully.")
 
     @staticmethod
@@ -65,5 +66,6 @@ class Client:
                           'validate both me.info and srv.info files.')
             raise err
         # Return the initialized messages_server:
-        return Client(server_ip=server_ip, server_port=port, client_name=name,
-                      client_id=client_id, logger=logger)
+        return Client(server_ip=server_ip, server_port=int(port),
+                      client_name=name, client_id=client_id.encode('utf-8'),
+                      logger=logger)
