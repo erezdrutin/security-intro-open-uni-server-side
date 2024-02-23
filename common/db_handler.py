@@ -61,7 +61,7 @@ class DatabaseHandler:
                 cur = conn.cursor()
                 cur.execute(query, args or kwargs)
                 return [row for row in cur.fetchall()]
-        except sqlite3.Error as err:
+        except (sqlite3.Error, Exception) as err:
             self.logger.warning(f"An exception was raised while performing "
                                 f"the query: {query}. Exception: {err}")
             raise err
@@ -133,32 +133,41 @@ class DatabaseHandler:
             data_class=models.Client, name=client_name)
         return None if not len(results) else results[0]
 
-    def add_client(self, client: models.Client) -> None:
+    def add_client(self, client: models.Client) -> bool:
         """
         Receives a client_side dataclass and attempts to add it to the DB.
         Letting the code "crash" in case of failure.
         @param client: The properties of the client_side to add.
+        @return: A boolean indicating whether the operation succeeded or not.
         """
-        self.perform_query(query=self.config[self.client_tbl].get(
-            'add_client'), id=client.id, name=client.name,
-            password_hash=client.password_hash, last_seen=client.last_seen)
+        try:
+            self.perform_query(query=self.config[self.client_tbl].get(
+                'add_client'), id=client.id, name=client.name,
+                password_hash=client.password_hash, last_seen=client.last_seen)
+            return True
+        except (sqlite3.Error, Exception):
+            self.logger.error(f"Failed to add client '{client.name}' to DB.")
+            return False
 
-    def add_server(self, server: models.Server) -> None:
+    def add_server(self, server: models.Server) -> bool:
         """
         Receives a file dataclass and attempts to add it to the DB.
         Letting the code "crash" in case of failure.
         @param server: The properties of the server to add.
+        @return: A boolean indicating whether the operation succeeded or not.
         """
         try:
             self.perform_query(query=self.config[self.servers_tbl].get(
                 'add_server'), id=server.id, name=server.name, ip=server.ip,
-                port=server.port)
+                port=server.port, aes_key=server.aes_key)
+            return True
         except sqlite3.IntegrityError:
             self.logger.info(f"Skipping insertion, server with ID "
                              f"'{server.id}' and name '{server.name}' "
                              f"already exists.")
+            return False
 
-    def get_servers(self) -> Union[models.Server, None]:
+    def get_servers(self) -> Union[List[models.Server], None]:
         """
         Attempts to fetch all servers from the DB. Returns None in case of
         failure to fetch any results.
@@ -169,7 +178,7 @@ class DatabaseHandler:
             results = self.perform_query_to_data_model(
                 query=self.config[self.servers_tbl].get('get_servers'),
                 data_class=models.Server)
-            return None if not len(results) else results[0]
+            return results
         except sqlite3.IntegrityError:
             self.logger.info("Failed to fetch any message servers from the DB")
             return None

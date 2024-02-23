@@ -1,14 +1,10 @@
-"""
-Author: Erez Drutin
-Date: 04.11.2023
-Purpose: The
-"""
-
 from __future__ import annotations
 import logging
 import socket
 import threading
 from typing import Dict, Any
+
+from common.consts import AuthRequestCodes
 from const import DEFAULT_PORT
 from common.custom_exceptions import ClientDisconnectedError
 from common.file_handler import FileHandler
@@ -35,14 +31,11 @@ class Server:
         @param client_socket: A socket to read messages from.
         @return:
         """
-        """
-        This function handles communication with a single client_side.
-        It processes multiple requests until the client_side disconnects.
-        """
         try:
             while True:
                 # For each new message in the socket, trigger handle_request:
-                self.protocol.handle_request(client_socket)
+                self.protocol.handle_incoming_message(
+                    client_socket=client_socket, codes_type=AuthRequestCodes)
         except ClientDisconnectedError as err:
             self.logger.warning(str(err))
         except (ConnectionResetError, BrokenPipeError):

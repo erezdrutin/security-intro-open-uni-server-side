@@ -5,7 +5,7 @@ Purpose: Execute the program. This is the entry point for our messages_server co
 """
 
 from const import DB_CONFIG, CLIENTS_TABLE, FILES_TABLE
-from server import Server
+from auth_server.server import Server
 
 
 def main():

@@ -42,7 +42,7 @@ class Server:
         try:
             while True:
                 # For each new message in the socket, trigger handle_request:
-                self.protocol.handle_request(client_socket)
+                self.protocol.handle_incoming_message(client_socket)
         except ClientDisconnectedError as err:
             self.logger.warning(str(err))
         except (ConnectionResetError, BrokenPipeError):

@@ -1,5 +1,6 @@
 import base64
 import hashlib
+from os import urandom
 from Crypto import Random
 from Crypto.Cipher import AES
 
@@ -49,3 +50,20 @@ class AESCipher:
         @return: The original plaintext string without padding.
         """
         return s[:-s[-1]]
+
+    @staticmethod
+    def create_aes_key() -> str:
+        """ Creates a new AES 32 bytes key and returns it as a string. """
+        return urandom(32).hex()
+
+
+# # Initialize your AESCipher with the hexadecimal string
+# key_hex = AESCipher.create_aes_key()
+# cipher = AESCipher(key_hex)
+#
+# # Encrypt and decrypt a message
+# encrypted = cipher.encrypt('Hello, World!')
+# print(f"Encrypted: {encrypted}")
+#
+# decrypted = cipher.decrypt(encrypted)
+# print(f"Decrypted: {decrypted}")

@@ -40,7 +40,7 @@ class ProtocolHandler(BaseProtocol):
         self.SERVER_VERSION = SERVER_VERSION
         self.db_handler = db_handler
 
-    def handle_request(self, client_socket: socket.socket) -> None:
+    def handle_incoming_message(self, client_socket: socket.socket) -> None:
         """
         Handles an incoming request from a client_side. The method first
         processes the initial bytes from a request to determine the client_side

@@ -1,8 +1,0 @@
-2024-02-20 23:00:27,963 - root - ERROR - Unable to load client_side configuration. Please validate both me.info and srv.info files.
-2024-02-22 20:46:00,552 - main - INFO - Request sent successfully.
-2024-02-22 20:46:00,552 - main - INFO - Response received: b''
-2024-02-22 21:13:39,372 - main - INFO - Request sent successfully.
-2024-02-22 21:13:39,375 - main - INFO - Response received: b''
-2024-02-22 21:14:11,561 - main - INFO - Request sent successfully.
-2024-02-22 21:14:47,574 - main - INFO - Request sent successfully.
-2024-02-22 21:14:47,575 - main - INFO - Response received: b''

@@ -11,21 +11,30 @@ layer to further distance the implementation level of the protocol handler
 from the actual required methods using an "abstract" class as an interface.
 """
 import logging
-from typing import Callable, Dict
+from socket import socket
+from typing import Callable, Dict, Type, Any
+from common.message_utils import unpack_client_message_headers, unpack_message
 from common.models import Request, Response
 from common.consts import AuthRequestCodes, MessagesServerRequestCodes
+from abc import ABC, abstractmethod
 
 RequestCodesType = AuthRequestCodes | MessagesServerRequestCodes
 
 
-class BaseProtocol:
+class BaseProtocol(ABC):
     # A dictionary that will hold a mapping between request codes and
     # matching methods to trigger.
     request_handlers: Dict[RequestCodesType, Callable] = {}
 
-    def __init__(self, logger=None):
+    def __init__(self, version: int, logger=None):
         self.logger = logger if logger else logging.getLogger(
             self.__class__.__name__)
+        self.version = version
+
+    @abstractmethod
+    def handle_incoming_message(self, client_socket: socket, **kwargs) -> Any:
+        """ Handles incoming messages. """
+        pass
 
     @classmethod
     def register_request(cls, code: RequestCodesType) -> Callable:
@@ -51,7 +60,7 @@ class BaseProtocol:
         @return: The wrapped method.
         """
 
-        def wrapper(client_socket, request: Request, *args, **kwargs):
+        def wrapper(client_socket: socket, request: Request, *args, **kwargs):
             info_msg = f"{request.code} from client ID: {request.client_id}"
 
             # Logging the request before receiving it and after handling it:

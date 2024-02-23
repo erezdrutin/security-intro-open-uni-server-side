@@ -4,7 +4,7 @@ Date: 04.11.2023
 Purpose: Execute the program. This is the entry point for our messages_server code.
 """
 from auth_server.consts import CLIENTS_TABLE, MESSAGE_SERVERS_TABLE, DB_CONFIG
-from server import Server
+from auth_server.server import Server
 
 
 def main():
