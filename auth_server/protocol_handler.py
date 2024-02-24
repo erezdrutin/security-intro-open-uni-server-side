@@ -1,16 +1,19 @@
 import logging
 import socket
-from datetime import datetime
+from base64 import b64encode
+from datetime import datetime, timedelta
 from typing import Any
 from hashlib import sha256
 from uuid import uuid4
-
-from auth_server.consts import SERVER_VERSION, RequestCodes, ResponseCodes
+from auth_server.consts import SERVER_VERSION, RequestCodes, ResponseCodes, \
+    TICKET_TTL_SEC
+from common.aes_cipher import AESCipher
 from common.consts import AuthRequestCodes
 from common.db_handler import DatabaseHandler
 from common.models import Request, Response, Client, Server
 from common.base_protocol import BaseProtocol
 from common.message_utils import unpack_client_message_headers, unpack_message
+from common.utils import enforce_len, ts_to_bytes_with_ttl
 
 
 class ProtocolHandler(BaseProtocol):
@@ -45,7 +48,7 @@ class ProtocolHandler(BaseProtocol):
         client_id = uuid4().bytes
 
         # Check if client already exists in the DB:
-        client_exists = self.db_handler.get_client(client_name=client_name)
+        client_exists = self.db_handler.get_client_by_name(name=client_name)
         if client_exists:
             response = Response(self.version,
                                 ResponseCodes.REGISTRATION_FAILED, b"")
@@ -89,7 +92,8 @@ class ProtocolHandler(BaseProtocol):
             name=server_name,
             ip=server_ip,
             port=server_port,
-            aes_key=aes_key
+            aes_key=aes_key,
+            version=request.version
         ))
 
         if not db_res:
@@ -97,9 +101,10 @@ class ProtocolHandler(BaseProtocol):
                 version=self.version, code=ResponseCodes.REGISTRATION_FAILED,
                 payload=b'')
         else:
+            logging.info(f"successfully registered server id {server_id}")
             response = Response(
                 version=self.version, code=ResponseCodes.REGISTRATION_SUCCESS,
-                payload=request.client_id)
+                payload=server_id)
 
         # Respond to the client:
         bytes_res = response.to_bytes()
@@ -124,6 +129,96 @@ class ProtocolHandler(BaseProtocol):
         bytes_res = response.to_bytes()
         client_socket.sendall(bytes_res)
 
+    @BaseProtocol.register_request(RequestCodes.GET_AES_KEY)
+    def _handle_get_aes(self, client_socket: socket.socket,
+                        request: Request) -> None:
+        shared_iv = AESCipher.create_iv()
+        shared_aes_key = AESCipher.create_aes_key()
+        server_id = request.payload[:16]
+        nonce = b64encode(request.payload[16:24].rstrip(b'\0'))
+
+        # Encrypted key construction (with client key):
+        client = self.db_handler.get_client_by_id(_id=request.client_id)
+        cipher = AESCipher(client.password_hash.hex())
+        encrypted_nonce = cipher.encrypt(nonce)
+        client_encrypted_aes = cipher.encrypt(shared_aes_key.encode('utf-8'))
+        # Encrypted key = 16 bytes (IV) + 8 bytes (Nonce) + 32 bytes (AES):
+        encrypted_key = shared_iv + enforce_len(encrypted_nonce, 8) + \
+                        enforce_len(client_encrypted_aes, 32)
+
+        self.logger.debug(f"encrypted key --> {encrypted_key}")
+        self.logger.debug(
+            f"decrypted values:\nnonce: {cipher.decrypt(encrypted_nonce)}"
+            f"\nnew_aes: {cipher.decrypt(client_encrypted_aes)}")
+
+        # Ticket construction (with messages server key):
+        server = self.db_handler.get_server_by_id(server_id=server_id)
+        cipher = AESCipher(server.aes_key.hex())
+        server_encrypted_aes = cipher.encrypt(shared_aes_key.encode('utf-8'))
+        creation_time = datetime.now()
+        expiration_ts = ts_to_bytes_with_ttl(creation_time, TICKET_TTL_SEC)
+        encrypted_expiration = cipher.encrypt(expiration_ts)
+
+        # Ticket:
+        # 1 byte ~ Version
+        # 16 bytes ~ Client ID
+        # 16 Bytes ~ Server ID
+        # 8 Bytes ~ Creation Time
+        # 16 Bytes ~ Ticket IV (==shared IV)
+        # 32 Bytes ~ AES Key (==shared key), encrypted with server AES(!)
+        # 8 bytes ~ Expiration Time, encrypted with server AES(!)
+        ticket = \
+            server.version.to_bytes(1, byteorder='big') + \
+            request.client_id[:16].ljust(16, b'\x00') + \
+            server.id[:16].ljust(16, b'\x00') + \
+            int(creation_time.timestamp()).to_bytes(8, byteorder='big') + \
+            shared_iv + \
+            enforce_len(server_encrypted_aes, 32) + \
+            enforce_len(encrypted_expiration, 8)
+
+        self.logger.debug(f"ticket --> {ticket}")
+        self.logger.debug(
+            f"decrypted values:\naes: {cipher.decrypt(server_encrypted_aes)}"
+            f"\nexpiration_timestamp: {cipher.decrypt(encrypted_expiration)}")
+
+        print("ok!")
+        # Ticket construction:
+        # server_aes_key = self.db_handler
+
+        # encrypted_nonce, iv = AESCipher(aes_key.decode('utf-8')).encrypt(nonce)
+
+        # Constructing encrypted_key:
+        # encrypted_key = iv + enforce_len(encrypted_nonce, 8) + aes_key
+
+        # Construct ticket
+        # 1. Version ~ 1 byte
+        # 2. Client ID ~ 16 bytes
+        # 3. Server ID ~ 16 bytes
+        # 4. Creation Time ~ 8 bytes
+        # 5. Ticket IV ~ 16 bytes
+        # 6. AES key ~ 32 bytes
+        # 7. Expiration time ~ 8 bytes
+        ticket = b''
+
+        payload = request.client_id + encrypted_key + ticket
+
+        print(encrypted_key)
+
+        # db_res = self.db_handler.get_servers()
+        # if db_res:
+        #     payload = b''.join(res.to_bytes() for res in db_res)
+        #     response = Response(
+        #         version=self.version, code=ResponseCodes.SERVERS_LIST,
+        #         payload=payload)
+        # else:
+        #     # Return an empty servers list
+        #     response = Response(
+        #         version=self.version, code=ResponseCodes.SERVERS_LIST,
+        #         payload=b'')
+        #
+        # # Respond to the client:
+        # bytes_res = response.to_bytes()
+        # client_socket.sendall(bytes_res)
     # @BaseProtocol.register_request(RequestCodes.REGISTRATION)
     # def _handle_registration(self, client_socket: socket.socket,
     #                          request: Request) -> None:

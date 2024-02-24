@@ -1,19 +1,23 @@
 import logging
 import socket
+from base64 import b64encode
 from typing import Any
 
 from auth_server.consts import ResponseCodes
 from client_side.consts import CLIENT_VERSION
 from common.consts import AuthRequestCodes, AuthResponseCodes
+from common.file_handler import FileHandler
 from common.message_utils import unpack_server_message_headers, unpack_message
 from common.models import Request, Response
 from common.base_protocol import BaseProtocol
 
 
 class AuthProtocolHandler(BaseProtocol):
-    def __init__(self, logger: logging.Logger, client_id: bytes):
+    def __init__(self, logger: logging.Logger, client_id: bytes,
+                 client_name: str):
         super().__init__(logger=logger, version=CLIENT_VERSION)
         self.client_id = client_id
+        self.client_name = client_name
 
     @staticmethod
     def make_request(client_socket: socket.socket, request: Request) -> None:
@@ -52,6 +56,15 @@ class AuthProtocolHandler(BaseProtocol):
         success and continue to handle the next method. """
         self.logger.info(f"Successfully registered to auth server with "
                          f"request: {request}")
+        if not self.client_id:
+            # Generated a new client id, we would probably want to store
+            # this as a "me.info" file:
+            self.client_id = request.payload
+            file_content = "\n".join([
+                self.client_name,
+                b64encode(request.payload).decode('utf-8')
+            ])
+            FileHandler("me.info", logger=self.logger).write_value(file_content)
         return request
 
     @BaseProtocol.register_request(ResponseCodes.REGISTRATION_FAILED)

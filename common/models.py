@@ -28,6 +28,7 @@ class Server:
     name: str
     ip: str
     port: int
+    version: int
     aes_key: Optional[bytes] = None
 
     def to_bytes(self) -> bytes:

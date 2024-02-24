@@ -61,10 +61,8 @@ class Client:
                 not self.client_id:
             # Update client id for all relevant dependencies:
             self.client_id = request.payload
-            self.req_builder = RequestFactory(
-                version=CLIENT_VERSION, logger=self.logger,
-                client_id=request.payload, client_name=self.client_name)
-            self.protocol.client_id = request.payload
+            self.req_builder.client_id = request.payload
+            # self.protocol.client_id = request.payload
         elif action == AuthRequestCodes.SERVER_REGISTRATION:
             self.server_id = request.payload
 
@@ -169,7 +167,8 @@ class Client:
             raise err
 
         protocol = AuthProtocolHandler(logger=logger,
-                                       client_id=client_id_bytes)
+                                       client_id=client_id_bytes,
+                                       client_name=name)
 
         return Client(server_port=int(port), server_ip=server_ip,
                       protocol=protocol,

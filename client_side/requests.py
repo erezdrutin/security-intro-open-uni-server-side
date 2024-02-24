@@ -4,8 +4,9 @@ from socket import inet_aton
 from secrets import token_bytes
 from common.aes_cipher import AESCipher
 from common.base_protocol import RequestCodesType
-from common.consts import AuthRequestCodes, MessagesServerRequestCodes
+from common.consts import AuthRequestCodes
 from common.models import Request
+from common.utils import enforce_len
 
 
 class RequestFactory:
@@ -34,15 +35,10 @@ class RequestFactory:
                           f"action '{action}': '{res}'")
         return res
 
-    @staticmethod
-    def enforce_len(data: bytes, length: int) -> bytes:
-        """Ensure the byte string is exactly 'length' bytes long."""
-        return data[:length].ljust(length, b'\0')
-
     def _build_auth_client_registration_request(self, **kwargs) -> Request:
         """ Creates a client registration request. """
-        padded_name = self.enforce_len(self.client_name.encode('utf-8'), 255)
-        padded_password = self.enforce_len(token_bytes(255), 255)
+        padded_name = enforce_len(self.client_name.encode('utf-8'), 255)
+        padded_password = enforce_len(token_bytes(255), 255)
         payload = padded_name + padded_password
         return Request(
             client_id=self.client_id,
@@ -53,8 +49,8 @@ class RequestFactory:
 
     def _build_auth_server_registration_request(self, **kwargs) -> Request:
         """ Creates a server registration request. """
-        padded_name = self.enforce_len(self.client_name.encode('utf-8'), 255)
-        padded_aes = self.enforce_len(AESCipher.create_aes_key().encode(
+        padded_name = enforce_len(self.client_name.encode('utf-8'), 255)
+        padded_aes = enforce_len(AESCipher.create_aes_key().encode(
             'utf-8'), 32)
         ip_bytes = inet_aton('0.0.0.0')
         port_bytes = randint(1000, 9999).to_bytes(2, byteorder='big')
@@ -81,10 +77,9 @@ class RequestFactory:
         if 'server_id' not in kwargs:
             raise ValueError(f"Can't create a get AES request without a "
                              f"server id.")
-        padded_server_id = self.enforce_len(kwargs['server_id'], 16)
-        padded_nonce = self.enforce_len(token_bytes(8), 8)
+        padded_server_id = enforce_len(kwargs['server_id'], 16)
+        padded_nonce = enforce_len(token_bytes(8), 8)
         payload = padded_server_id + padded_nonce
-        # Nonce
         return Request(
             client_id=self.client_id,
             version=self.version,

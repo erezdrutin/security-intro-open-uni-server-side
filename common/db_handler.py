@@ -120,17 +120,30 @@ class DatabaseHandler:
         self.perform_query(query=self.config[self.client_tbl].get(
             'update_client_last_seen'), id=client_id, last_seen=datetime.now())
 
-    def get_client(self, client_name: str) -> Union[models.Client, None]:
+    def get_client_by_name(self, name: str) -> Union[models.Client, None]:
         """
         Receives a client_side name and attempts to fetch it from the DB.
         Returns either a client_side instance or None if failed to find one.
         Letting the code "crash" in case of failure.
-        @param client_name: The name of the client_side to fetch.
+        @param name: The name of the client_side to fetch.
         @return: A client_side instantiated dataclass instance.
         """
         results = self.perform_query_to_data_model(
-            query=self.config[self.client_tbl].get('get_client'),
-            data_class=models.Client, name=client_name)
+            query=self.config[self.client_tbl].get('get_client_by_name'),
+            data_class=models.Client, name=name)
+        return None if not len(results) else results[0]
+
+    def get_client_by_id(self, _id: bytes) -> Union[models.Client, None]:
+        """
+        Receives a client id and attempts to fetch it from the DB.
+        Returns either a client_side instance or None if failed to find one.
+        Letting the code "crash" in case of failure.
+        @param _id: The id of the client_side to fetch.
+        @return: A client_side instantiated dataclass instance.
+        """
+        results = self.perform_query_to_data_model(
+            query=self.config[self.client_tbl].get('get_client_by_id'),
+            data_class=models.Client, id=_id)
         return None if not len(results) else results[0]
 
     def add_client(self, client: models.Client) -> bool:
@@ -159,7 +172,8 @@ class DatabaseHandler:
         try:
             self.perform_query(query=self.config[self.servers_tbl].get(
                 'add_server'), id=server.id, name=server.name, ip=server.ip,
-                port=server.port, aes_key=server.aes_key)
+                port=server.port, aes_key=server.aes_key,
+                version=server.version)
             return True
         except sqlite3.IntegrityError:
             self.logger.info(f"Skipping insertion, server with ID "
@@ -183,18 +197,29 @@ class DatabaseHandler:
             self.logger.info("Failed to fetch any message servers from the DB")
             return None
 
-
-    # def get_aes_key_for_client(self, client_id: bytes) -> bytes:
+    def get_server_by_id(self, server_id: bytes) -> Union[models.Server, None]:
+        """
+        Receives a server id and attempts to fetch it from the DB.
+        Returns either a client_side instance or None if failed to find one.
+        Letting the code "crash" in case of failure.
+        @param server_id: The id of the client_side to fetch.
+        @return: A client_side instantiated dataclass instance.
+        """
+        results = self.perform_query_to_data_model(
+            query=self.config[self.servers_tbl].get('get_server_by_id'),
+            data_class=models.Server, id=server_id)
+        return None if not len(results) else results[0]
+    # def get_aes_key_for_server(self, server_id: bytes) -> bytes:
     #     """
     #     Receives a client_id and returns its matching AES key. Letting the
     #     code "crash" in case of failure.
-    #     @param client_id: A client_side id to fetch an AES key for.
+    #     @param server_id: A client_side id to fetch an AES key for.
     #     @return: A bytes sequence representing the requested AES key.
     #     """
     #     # Selecting the first record from the first row in the results:
-    #     return self.perform_query(query=self.config[self.client_tbl].get(
-    #         'get_client_aes'), id=client_id)[0][0]
-    #
+    #     return self.perform_query(query=self.config[self.servers_tbl].get(
+    #         'get_server_aes'), id=server_id)[0][0]
+
     # def update_public_key_and_aes_key(self, client_id: bytes, aes_key: bytes,
     #                                   public_key: bytes) -> None:
     #     """
