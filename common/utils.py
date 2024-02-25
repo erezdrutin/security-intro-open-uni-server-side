@@ -6,7 +6,7 @@ def enforce_len(data: bytes, length: int) -> bytes:
     return data[:length].ljust(length, b'\0')
 
 
-def ts_to_bytes_with_ttl(timestamp: datetime, ttl_seconds: int) -> bytes:
+def dt_with_ttl_to_ts(timestamp: datetime, ttl_seconds: int) -> int:
     """
     Takes in an initial timestamp and a ttl to add to that timestamp (in
     seconds). Returns the binary representation of the joined timestamp.
@@ -16,7 +16,7 @@ def ts_to_bytes_with_ttl(timestamp: datetime, ttl_seconds: int) -> bytes:
     """
     expiration_time = timestamp + timedelta(seconds=ttl_seconds)
     expiration_timestamp = int(expiration_time.timestamp())
-    return expiration_timestamp.to_bytes(8, byteorder='big')
+    return expiration_timestamp
 
 
 def convert_bytes_to_timestamp(bytes_rep: bytes) -> datetime:

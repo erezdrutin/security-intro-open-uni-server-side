@@ -1,6 +1,6 @@
 import logging
 import socket
-from base64 import b64encode
+from base64 import b64encode, b64decode
 from datetime import datetime, timedelta
 from typing import Any
 from hashlib import sha256
@@ -10,10 +10,11 @@ from auth_server.consts import SERVER_VERSION, RequestCodes, ResponseCodes, \
 from common.aes_cipher import AESCipher
 from common.consts import AuthRequestCodes
 from common.db_handler import DatabaseHandler
-from common.models import Request, Response, Client, Server
+from common.models import Request, Response, Client, Server, EncryptedKey, \
+    EncryptedTicket, DecryptedTicket
 from common.base_protocol import BaseProtocol
 from common.message_utils import unpack_client_message_headers, unpack_message
-from common.utils import enforce_len, ts_to_bytes_with_ttl
+from common.utils import enforce_len, dt_with_ttl_to_ts
 
 
 class ProtocolHandler(BaseProtocol):
@@ -135,29 +136,47 @@ class ProtocolHandler(BaseProtocol):
         shared_iv = AESCipher.create_iv()
         shared_aes_key = AESCipher.create_aes_key()
         server_id = request.payload[:16]
-        nonce = b64encode(request.payload[16:24].rstrip(b'\0'))
+        nonce = request.payload[16:24]
 
         # Encrypted key construction (with client key):
         client = self.db_handler.get_client_by_id(_id=request.client_id)
-        cipher = AESCipher(client.password_hash.hex())
-        encrypted_nonce = cipher.encrypt(nonce)
-        client_encrypted_aes = cipher.encrypt(shared_aes_key.encode('utf-8'))
-        # Encrypted key = 16 bytes (IV) + 8 bytes (Nonce) + 32 bytes (AES):
-        encrypted_key = shared_iv + enforce_len(encrypted_nonce, 8) + \
-                        enforce_len(client_encrypted_aes, 32)
+        cipher = AESCipher(client.password_hash.hex(), shared_iv)
+        encrypted_key = EncryptedKey.create(
+            shared_iv=shared_iv, shared_aes_key=shared_aes_key, nonce=nonce,
+            cipher=cipher)
 
-        self.logger.debug(f"encrypted key --> {encrypted_key}")
-        self.logger.debug(
-            f"decrypted values:\nnonce: {cipher.decrypt(encrypted_nonce)}"
-            f"\nnew_aes: {cipher.decrypt(client_encrypted_aes)}")
+        # cipher = AESCipher(client.password_hash.hex())
+        encrypted_nonce = cipher.encrypt(nonce)
+        client_encrypted_aes = cipher.encrypt(b64decode(shared_aes_key))
+        # Encrypted key = 16 bytes (IV) + ENCRYPTED 8 bytes (Nonce) +
+        # ENCRYPTED 32 bytes (AES):
+        # encrypted_key = shared_iv + encrypted_nonce + client_encrypted_aes
+        # encrypted_key = EncryptedKey.from_bytes(
+        #     encrypted_key_new.to_bytes(), cipher)
+
+        # self.logger.debug(f"encrypted key --> {encrypted_key}")
+        # self.logger.debug(
+        #     f"decrypted values:\nnonce: {cipher.decrypt(encrypted_nonce)}"
+        #     f"\nnew_aes: {b64encode(cipher.decrypt(client_encrypted_aes))}")
+
+        # encrypted_from_bytes = EncryptedKey.from_bytes(encrypted_key, cipher)
 
         # Ticket construction (with messages server key):
         server = self.db_handler.get_server_by_id(server_id=server_id)
         cipher = AESCipher(server.aes_key.hex())
-        server_encrypted_aes = cipher.encrypt(shared_aes_key.encode('utf-8'))
+        server_encrypted_aes = cipher.encrypt(b64decode(shared_aes_key))
         creation_time = datetime.now()
-        expiration_ts = ts_to_bytes_with_ttl(creation_time, TICKET_TTL_SEC)
-        encrypted_expiration = cipher.encrypt(expiration_ts)
+        expiration_ts = dt_with_ttl_to_ts(creation_time, TICKET_TTL_SEC)
+        encrypted_expiration = cipher.encrypt(
+            expiration_ts.to_bytes(8, byteorder='big'))
+
+        ticket = EncryptedTicket.create(
+            version=self.version, client_id=request.client_id,
+            server_id=server.id, creation_time=creation_time,
+            shared_iv=shared_iv, aes_key=shared_aes_key,
+            ticket_ttl_sec=TICKET_TTL_SEC, cipher=cipher)
+
+        print(ticket.to_bytes())
 
         # Ticket:
         # 1 byte ~ Version
@@ -167,58 +186,31 @@ class ProtocolHandler(BaseProtocol):
         # 16 Bytes ~ Ticket IV (==shared IV)
         # 32 Bytes ~ AES Key (==shared key), encrypted with server AES(!)
         # 8 bytes ~ Expiration Time, encrypted with server AES(!)
-        ticket = \
+        ticket_2 = \
             server.version.to_bytes(1, byteorder='big') + \
             request.client_id[:16].ljust(16, b'\x00') + \
             server.id[:16].ljust(16, b'\x00') + \
             int(creation_time.timestamp()).to_bytes(8, byteorder='big') + \
             shared_iv + \
-            enforce_len(server_encrypted_aes, 32) + \
-            enforce_len(encrypted_expiration, 8)
+            server_encrypted_aes + \
+            encrypted_expiration
 
+        print(ticket_2)
+        print(ticket.to_bytes() == ticket_2)
+        decrypted_ticket = DecryptedTicket.from_bytes(ticket_2, cipher)
         self.logger.debug(f"ticket --> {ticket}")
         self.logger.debug(
             f"decrypted values:\naes: {cipher.decrypt(server_encrypted_aes)}"
             f"\nexpiration_timestamp: {cipher.decrypt(encrypted_expiration)}")
 
-        print("ok!")
-        # Ticket construction:
-        # server_aes_key = self.db_handler
+        payload = request.client_id + encrypted_key.to_bytes() + ticket.to_bytes()
+        response = Response(
+            version=self.version, code=ResponseCodes.AES_KEY,
+            payload=payload)
+        # Respond to the client:
+        bytes_res = response.to_bytes()
+        client_socket.sendall(bytes_res)
 
-        # encrypted_nonce, iv = AESCipher(aes_key.decode('utf-8')).encrypt(nonce)
-
-        # Constructing encrypted_key:
-        # encrypted_key = iv + enforce_len(encrypted_nonce, 8) + aes_key
-
-        # Construct ticket
-        # 1. Version ~ 1 byte
-        # 2. Client ID ~ 16 bytes
-        # 3. Server ID ~ 16 bytes
-        # 4. Creation Time ~ 8 bytes
-        # 5. Ticket IV ~ 16 bytes
-        # 6. AES key ~ 32 bytes
-        # 7. Expiration time ~ 8 bytes
-        ticket = b''
-
-        payload = request.client_id + encrypted_key + ticket
-
-        print(encrypted_key)
-
-        # db_res = self.db_handler.get_servers()
-        # if db_res:
-        #     payload = b''.join(res.to_bytes() for res in db_res)
-        #     response = Response(
-        #         version=self.version, code=ResponseCodes.SERVERS_LIST,
-        #         payload=payload)
-        # else:
-        #     # Return an empty servers list
-        #     response = Response(
-        #         version=self.version, code=ResponseCodes.SERVERS_LIST,
-        #         payload=b'')
-        #
-        # # Respond to the client:
-        # bytes_res = response.to_bytes()
-        # client_socket.sendall(bytes_res)
     # @BaseProtocol.register_request(RequestCodes.REGISTRATION)
     # def _handle_registration(self, client_socket: socket.socket,
     #                          request: Request) -> None:

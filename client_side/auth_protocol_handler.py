@@ -4,7 +4,7 @@ from base64 import b64encode
 from typing import Any
 
 from auth_server.consts import ResponseCodes
-from client_side.consts import CLIENT_VERSION
+from client_side.consts import CLIENT_VERSION, ME_FILE_PATH
 from common.consts import AuthRequestCodes, AuthResponseCodes
 from common.file_handler import FileHandler
 from common.message_utils import unpack_server_message_headers, unpack_message
@@ -64,14 +64,15 @@ class AuthProtocolHandler(BaseProtocol):
                 self.client_name,
                 b64encode(request.payload).decode('utf-8')
             ])
-            FileHandler("me.info", logger=self.logger).write_value(file_content)
+            FileHandler(ME_FILE_PATH, logger=self.logger).write_value(
+                file_content)
         return request
 
     @BaseProtocol.register_request(ResponseCodes.REGISTRATION_FAILED)
     def _handle_registration_failure(self, client_socket: socket,
                                      request: Request) -> Request:
-        self.logger.info(f"Failed to register to auth server with "
-                         f"request: {request}")
+        self.logger.error(f"Failed to register to auth server with "
+                          f"request: {request}")
         return request
 
     @BaseProtocol.register_request(ResponseCodes.SERVERS_LIST)
@@ -85,7 +86,18 @@ class AuthProtocolHandler(BaseProtocol):
     @BaseProtocol.register_request(ResponseCodes.AES_KEY)
     def _handle_get_aes_key(self, client_socket: socket,
                             request: Request) -> Request:
+        # Do something with all the provided crap ffs:
         self.logger.info(f"Successfully fetched AES / Ticket keys from auth "
                          f"server: {request.payload}")
+        if not self.client_id:
+            # Generated a new client id, we would probably want to store
+            # this as a "me.info" file:
+            self.client_id = request.payload
+            file_content = "\n".join([
+                self.client_name,
+                b64encode(request.payload).decode('utf-8')
+            ])
+            FileHandler(ME_FILE_PATH, logger=self.logger).write_value(
+                file_content)
         print(request.payload)
         return request

@@ -1,4 +1,3 @@
-import base64
 import hashlib
 from os import urandom
 from Crypto.Cipher import AES
@@ -21,15 +20,15 @@ class AESCipher:
         padded_data = self._pad(data)
         cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
         encrypted = cipher.encrypt(padded_data)
-        return base64.b64encode(encrypted)
+        return encrypted
 
     def decrypt(self, enc: bytes) -> bytes:
         """
-        Decrypts an encrypted string encoded in base64 using AES-256-CBC with a predefined IV.
+        Decrypts an encrypted string encoded in base64 using AES-256-CBC
+        with a predefined IV.
         @param enc: An encrypted data encoded in base64.
         @return: The decrypted data in bytes.
         """
-        enc = base64.b64decode(enc)
         cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
         decrypted = cipher.decrypt(enc)
         return self.unpad(decrypted)
@@ -62,6 +61,39 @@ class AESCipher:
         """Creates a new IV for AES encryption."""
         return urandom(AES.block_size)
 
+    def decrypt_custom_(self, message: bytes) -> Tuple[bytes, bytes]:
+        iv = message[:16]
+        encrypted_nonce = message[16:32]
+        encrypted_aes = message[32:80]
+
+        self.iv = iv  # Set the IV to what was used for this message
+        decrypted_nonce = self.decrypt(encrypted_nonce)
+        decrypted_aes = self.decrypt(encrypted_aes)
+
+        return decrypted_nonce, decrypted_aes
+
+# original_key = AESCipher.create_aes_key()  # This will be the AES key used for encryption/decryption
+# cipher = AESCipher(original_key)
+#
+# # Encrypt a nonce (8 bytes) and a new AES key (32 bytes)
+# nonce = urandom(8)  # Generate an 8-byte nonce
+# new_aes_key = urandom(32)  # Simulate a new AES key to be sent
+#
+# # Encrypt both nonce and new_aes_key
+# encrypted_nonce = cipher.encrypt(nonce)
+# encrypted_aes_key = cipher.encrypt(new_aes_key)
+#
+# # Concatenate iv + encrypted_nonce + encrypted_aes_key
+# message = cipher.iv + encrypted_nonce + encrypted_aes_key
+#
+# # Decryption process to verify
+# decrypted_nonce, decrypted_aes_key = cipher.decrypt_message_format(message)
+#
+# # Verification
+# nonce_match = nonce == decrypted_nonce
+# aes_key_match = new_aes_key == decrypted_aes_key
+#
+# print(nonce_match, aes_key_match)
 
 # # Generate a shared IV for both operations
 # shared_iv = AESCipher.create_iv()
