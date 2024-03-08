@@ -11,11 +11,12 @@ from common.utils import enforce_len
 
 class RequestFactory:
     def __init__(self, version: int, logger: logging.Logger, client_id: bytes,
-                 client_name: str):
+                 client_name: str, client_password: str):
         self.version = version
         self.logger = logger
         self.client_id = client_id
         self.client_name = client_name
+        self.client_password = client_password
 
     def create_request(self, action: RequestCodesType, **kwargs) -> Request:
         match action:
@@ -38,7 +39,9 @@ class RequestFactory:
     def _build_auth_client_registration_request(self, **kwargs) -> Request:
         """ Creates a client registration request. """
         padded_name = enforce_len(self.client_name.encode('utf-8'), 255)
-        padded_password = enforce_len(token_bytes(255), 255)
+        padded_password = enforce_len(self.client_password.encode('utf-8'),
+                                      255)
+        # Construct payload & request:
         payload = padded_name + padded_password
         return Request(
             client_id=self.client_id,

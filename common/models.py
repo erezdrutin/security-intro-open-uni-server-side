@@ -107,34 +107,45 @@ class Response:
 
 
 @dataclass
-class EncryptedKey:
+class BaseKey:
     shared_iv: bytes
+
+
+@dataclass
+class DecryptedKey(BaseKey):
+    decrypted_aes: bytes
+    decrypted_nonce: bytes
+
+    @staticmethod
+    def from_bytes(encrypted_key: bytes, cipher_key: str) -> DecryptedKey:
+        """
+        Both encrypted_nonce and encrypted_aes will be in b64decoded format.
+        @param encrypted_key: A byte sequence representing an encrypted key.
+        @param cipher_key: A cipher key to encrypt values with.
+        @return: An instance of this dataclass.
+        """
+        shared_iv = encrypted_key[:16]
+        encrypted_nonce = encrypted_key[16:32]
+        encrypted_aes = encrypted_key[32:112]
+        cipher = AESCipher(key=cipher_key, iv=shared_iv)
+        # Decrypt the encrypted values:
+        nonce = cipher.decrypt(encrypted_nonce)
+        shared_aes_key = cipher.decrypt(encrypted_aes)
+
+        return DecryptedKey(shared_iv=shared_iv, decrypted_nonce=nonce,
+                            decrypted_aes=shared_aes_key)
+
+
+@dataclass
+class EncryptedKey(BaseKey):
     encrypted_nonce: bytes
-    client_encrypted_aes: bytes
+    encrypted_aes: bytes
 
     def to_bytes(self) -> bytes:
         # Encrypted key = 16 bytes (IV) + ENCRYPTED 8 bytes (Nonce) +
         # ENCRYPTED 32 bytes (AES):
         return self.shared_iv + self.encrypted_nonce \
-               + self.client_encrypted_aes
-
-    @staticmethod
-    def from_bytes(encrypted_key: bytes, cipher: AESCipher) -> EncryptedKey:
-        """
-        Both encrypted_nonce and encrypted_aes will be in b64decoded format.
-        @param encrypted_key: A byte sequence representing an encrypted key.
-        @param cipher: A cipher to encrypt the key with.
-        @return: An instance of this dataclass.
-        """
-        shared_iv = encrypted_key[:16]
-        encrypted_nonce = encrypted_key[16:32]
-        encrypted_aes = encrypted_key[32:]
-        # Decrypt the encrypted values:
-        nonce = cipher.decrypt(encrypted_nonce)
-        shared_aes_key = cipher.decrypt(encrypted_aes)
-
-        return EncryptedKey(shared_iv=shared_iv, encrypted_nonce=nonce,
-                            client_encrypted_aes=shared_aes_key)
+               + self.encrypted_aes
 
     @staticmethod
     def create(shared_iv: bytes, shared_aes_key: str, nonce: bytes,
@@ -143,7 +154,7 @@ class EncryptedKey:
         client_encrypted_aes = cipher.encrypt(shared_aes_key.encode('utf-8'))
         return EncryptedKey(shared_iv=shared_iv,
                             encrypted_nonce=encrypted_nonce,
-                            client_encrypted_aes=client_encrypted_aes)
+                            encrypted_aes=client_encrypted_aes)
 
 
 @dataclass
@@ -204,6 +215,26 @@ class EncryptedTicket(BaseTicket):
                self.encrypted_aes_key + self.encrypted_expiration_time
 
     @staticmethod
+    def from_bytes(data: bytes) -> EncryptedTicket:
+        # Load an instance of Ticket from bytes representation.
+        version = data[0]
+        client_id = data[1:17]
+        server_id = data[17:33]
+        creation_time = datetime.fromtimestamp(
+            int.from_bytes(data[33:41], byteorder='big'))
+        ticket_iv = data[41:57]
+        # b64 decoded aes is 48 bytes:
+        encrypted_aes_key = data[57:57 + 64]
+        # encrypted_expiration_time is 16 bytes, from the end
+        encrypted_expiration_time = data[len(data) - 16:]
+
+        return EncryptedTicket(
+            version=version, client_id=client_id, server_id=server_id,
+            creation_time=creation_time, ticket_iv=ticket_iv,
+            encrypted_aes_key=encrypted_aes_key,
+            encrypted_expiration_time=encrypted_expiration_time)
+
+    @staticmethod
     def create(version: int, client_id: bytes, server_id: bytes,
                creation_time: datetime, shared_iv: bytes, aes_key: str,
                ticket_ttl_sec: int, cipher: AESCipher) -> EncryptedTicket:
@@ -222,4 +253,56 @@ class EncryptedTicket(BaseTicket):
             ticket_iv=shared_iv,
             encrypted_aes_key=server_encrypted_aes,
             encrypted_expiration_time=encrypted_expiration
+        )
+
+
+@dataclass
+class BaseAuthenticator:
+    shared_iv: bytes
+    version: bytes
+    client_id: bytes
+    server_id: bytes
+    creation_time: bytes
+
+
+@dataclass
+class DecryptedAuthenticator(BaseAuthenticator):
+    @staticmethod
+    def from_bytes(data: bytes, cipher: AESCipher) -> DecryptedAuthenticator:
+        shared_iv = data[0:16]
+        enc_version = data[16:24]
+        enc_client_id = data[24:40]
+        enc_server_id = data[40:56]
+        enc_creation_time = data[56:64]
+
+        return DecryptedAuthenticator(
+            shared_iv=shared_iv, version=cipher.decrypt(enc_version),
+            client_id=cipher.decrypt(enc_client_id),
+            server_id=cipher.decrypt(enc_server_id),
+            creation_time=cipher.decrypt(enc_creation_time))
+
+
+@dataclass
+class EncryptedAuthenticator(BaseAuthenticator):
+    encrypted_version: bytes
+    encrypted_client_id: bytes
+    encrypted_server_id: bytes
+    encrypted_creation_time: bytes
+
+    @staticmethod
+    def create(version: int, client_id: bytes, server_id: bytes,
+               creation_time: datetime, shared_iv: bytes, cipher: AESCipher) \
+            -> EncryptedAuthenticator:
+        enc_version = cipher.encrypt(version.to_bytes(1, byteorder='big'))
+        enc_client_id = cipher.encrypt(client_id)
+        enc_server_id = cipher.encrypt(server_id)
+        creation_time_ts = int(round(creation_time.timestamp()))
+        enc_creation_time = cipher.encrypt(
+            creation_time_ts.to_bytes(8, byteorder='big'))
+        return EncryptedAuthenticator(
+            shared_iv=shared_iv,
+            encrypted_version=enc_version,
+            encrypted_client_id=enc_client_id,
+            encrypted_server_id=enc_server_id,
+            encrypted_creation_time=enc_creation_time
         )

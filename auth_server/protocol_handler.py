@@ -11,7 +11,7 @@ from common.aes_cipher import AESCipher
 from common.consts import AuthRequestCodes
 from common.db_handler import DatabaseHandler
 from common.models import Request, Response, Client, Server, EncryptedKey, \
-    EncryptedTicket, DecryptedTicket
+    EncryptedTicket, DecryptedTicket, DecryptedKey
 from common.base_protocol import BaseProtocol
 from common.message_utils import unpack_client_message_headers, unpack_message
 from common.utils import enforce_len, dt_with_ttl_to_ts
@@ -45,6 +45,7 @@ class ProtocolHandler(BaseProtocol):
         # Extract name & password from the payload, apply sha256 on password:
         client_name = request.payload[:255].rstrip(b'\0').decode('utf-8')
         client_password = sha256(request.payload[255:510]).digest()
+        print(f"CLIENT PASS SHA --> {client_password}")
         # Generate a 16 bit UUID for the client:
         client_id = uuid4().bytes
 
@@ -145,9 +146,17 @@ class ProtocolHandler(BaseProtocol):
             shared_iv=shared_iv, shared_aes_key=shared_aes_key, nonce=nonce,
             cipher=cipher)
 
+        encrypted_on_decrypt = DecryptedKey.from_bytes(
+            encrypted_key.to_bytes(), client.password_hash.hex())
+
+        print("––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––")
+        print(f"KEY STUFF - IV: {shared_iv}, AES: {shared_aes_key}, "
+              f"NONCE:{nonce}")
+        # print(f"ENCRYPTED KEY TO BYTES: {encrypted_key.to_bytes()}")
+        # print(f"LEN ENCRYPTED KEY IN BYTES: {len(encrypted_key.to_bytes())}")
         # cipher = AESCipher(client.password_hash.hex())
-        encrypted_nonce = cipher.encrypt(nonce)
-        client_encrypted_aes = cipher.encrypt(b64decode(shared_aes_key))
+        # encrypted_nonce = cipher.encrypt(nonce)
+        # client_encrypted_aes = cipher.encrypt(b64decode(shared_aes_key))
         # Encrypted key = 16 bytes (IV) + ENCRYPTED 8 bytes (Nonce) +
         # ENCRYPTED 32 bytes (AES):
         # encrypted_key = shared_iv + encrypted_nonce + client_encrypted_aes
@@ -176,7 +185,13 @@ class ProtocolHandler(BaseProtocol):
             shared_iv=shared_iv, aes_key=shared_aes_key,
             ticket_ttl_sec=TICKET_TTL_SEC, cipher=cipher)
 
-        print(ticket.to_bytes())
+        print("––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––")
+        print(f"TICKET STUFF:\nVERSION: {ticket.version}\n"
+              f"CLIENT_ID: {ticket.client_id}\nSERVER_ID: {ticket.server_id}\n"
+              f"CREATION_TIME: {ticket.creation_time}\nSHARED_IV: "
+              f"{ticket.ticket_iv}\nAES_KEY: {shared_aes_key}\n"
+              f"TICKET_TTL: {TICKET_TTL_SEC}")
+        print("TICKET TO BYTES: ", ticket.to_bytes())
 
         # Ticket:
         # 1 byte ~ Version

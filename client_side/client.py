@@ -16,19 +16,22 @@ from common.models import Request
 class Client:
     def __init__(self, server_port: int, server_ip: str, client_name: str,
                  client_id: bytes, protocol: AuthProtocolHandler,
-                 logger: logging.Logger, actions: List[RequestCodeTypes]):
+                 client_password: str, logger: logging.Logger,
+                 actions: List[RequestCodeTypes]):
         self.server_port = server_port
         self.server_ip = server_ip
         self.protocol: AuthProtocolHandler = protocol
         self.logger = logger
         self.client_id = client_id
         self.client_name = client_name
+        self.client_password = client_password
         self.client_socket = None
         self.server_id = None
         self.actions = actions
         self.req_builder = RequestFactory(
             version=CLIENT_VERSION, logger=self.logger,
-            client_id=self.client_id, client_name=self.client_name)
+            client_id=self.client_id, client_name=self.client_name,
+            client_password=self.client_password)
 
     def _prepare_request(self, action: RequestCodeTypes) -> Dict[str, Any]:
         """ Prepares the kwargs dict based on the action to perform. """
@@ -114,8 +117,8 @@ class Client:
         return logging.getLogger(logger_name)
 
     @staticmethod
-    def load_or_prompt_client_details(me_path: str, logger: logging.Logger) \
-            -> Tuple[str, Optional[bytes]]:
+    def fetch_client_details(me_path: str, logger: logging.Logger) \
+            -> Tuple[str, Optional[bytes], str]:
         """
         Loads client details from a file or prompts the user if the file path is empty.
         Returns the client name and client_id (as bytes or None).
@@ -123,10 +126,10 @@ class Client:
         if me_path:
             try:
                 client_details_loader = FileHandler(me_path, logger=logger)
-                name, client_id = client_details_loader.load_value().split(
+                name, _id, password = client_details_loader.load_value().split(
                     '\n')
-                client_id_bytes = client_id.encode('utf-8')
-                return name, client_id_bytes
+                client_id_bytes = _id.encode('utf-8')
+                return name, client_id_bytes, password
             except (ValueError, AttributeError, IndexError, Exception) as err:
                 logger.error(
                     'Unable to load client_side configuration from me_path. '
@@ -135,7 +138,8 @@ class Client:
         else:
             # Prompt for client name since me_path is empty
             client_name = input("Enter client name: ")
-            return client_name, None
+            client_password = input("Enter client password: ")
+            return client_name, None, client_password
 
     @staticmethod
     def initialize_client(actions: List[RequestCodeTypes],
@@ -158,7 +162,7 @@ class Client:
         try:
             auth_server_loader = FileHandler(auth_server_path, logger=logger)
             server_ip, port = auth_server_loader.load_value().split(':')
-            name, client_id_bytes = Client.load_or_prompt_client_details(
+            name, client_id_bytes, password = Client.fetch_client_details(
                 me_path=me_path, logger=logger)
         except (ValueError, AttributeError, IndexError, Exception) as err:
             logger.error(
@@ -168,9 +172,10 @@ class Client:
 
         protocol = AuthProtocolHandler(logger=logger,
                                        client_id=client_id_bytes,
+                                       client_key=password,
                                        client_name=name)
 
         return Client(server_port=int(port), server_ip=server_ip,
-                      protocol=protocol,
+                      protocol=protocol, client_password=password,
                       logger=logger, client_name=name,
                       client_id=client_id_bytes, actions=actions)
