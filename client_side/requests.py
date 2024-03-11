@@ -32,6 +32,8 @@ class RequestFactory:
                 res = self._build_get_aes_key_request(**kwargs)
             case MessagesServerRequestCodes.AUTHENTICATE:
                 res = self._build_authenticate_msg_server_request(**kwargs)
+            case MessagesServerRequestCodes.SEND_MESSAGE:
+                res = self._build_send_message_to_msg_server_request(**kwargs)
             case _:
                 self.logger.error(f"Received an invalid request code to "
                                   f"construct - {action}")
@@ -106,3 +108,17 @@ class RequestFactory:
             code=MessagesServerRequestCodes.AUTHENTICATE,
             payload=kwargs['payload']
         )
+
+    def _build_send_message_to_msg_server_request(self, **kwargs) -> Request:
+        """ Builds "SEND MESSAGE" msg server request. """
+        if 'payload' not in kwargs:
+            msg = "Can't send a message to Messages Server without user input"
+            self.logger.error(msg)
+            raise ValueError(msg)
+        return Request(
+            client_id=self.client_id,
+            version=self.version,
+            code=MessagesServerRequestCodes.SEND_MESSAGE,
+            payload=kwargs['payload']
+        )
+

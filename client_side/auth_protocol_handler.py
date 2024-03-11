@@ -2,17 +2,15 @@ import logging
 import socket
 from base64 import b64encode
 from hashlib import sha256
-from typing import Any, Union
+from typing import Any
 
-from auth_server.consts import ResponseCodes
 from client_side.consts import CLIENT_VERSION, ME_FILE_PATH
 from common.aes_cipher import AESCipher
-from common.consts import AuthRequestCodes, AuthResponseCodes
+from common.consts import AuthResponseCodes, MessagesServerResponseCodes
 from common.file_handler import FileHandler
 from common.message_utils import unpack_server_message_headers, unpack_message
-from common.models import Request, Response, EncryptedKey, DecryptedKey, \
-    DecryptedTicket, EncryptedTicket, Server, EncryptedAuthenticator, \
-    DecryptedAuthenticator
+from common.models import Request, DecryptedKey, EncryptedTicket, Server, \
+    EncryptedAuthenticator, DecryptedAuthenticator
 from common.base_protocol import BaseProtocol
 from common.utils import enforce_len
 
@@ -24,6 +22,7 @@ class AuthProtocolHandler(BaseProtocol):
         self.client_id = client_id
         self.client_name = client_name
         self.client_key = client_key
+        self.shared_aes_key = None
 
     @staticmethod
     def make_request(client_socket: socket.socket, request: Request) -> None:
@@ -55,7 +54,7 @@ class AuthProtocolHandler(BaseProtocol):
         handler = self.log_decorator(handler)
         return handler(client_socket, request)
 
-    @BaseProtocol.register_request(ResponseCodes.REGISTRATION_SUCCESS)
+    @BaseProtocol.register_request(AuthResponseCodes.REGISTRATION_SUCCESS)
     def _handle_registration_success(self, client_socket: socket,
                                      request: Request) -> Request:
         """ In case of successful client / server registration - log the
@@ -74,14 +73,14 @@ class AuthProtocolHandler(BaseProtocol):
                 file_content)
         return request
 
-    @BaseProtocol.register_request(ResponseCodes.REGISTRATION_FAILED)
+    @BaseProtocol.register_request(AuthResponseCodes.REGISTRATION_FAILED)
     def _handle_registration_failure(self, client_socket: socket,
                                      request: Request) -> Request:
         self.logger.error(f"Failed to register to auth server with "
                           f"request: {request}")
         return request
 
-    @BaseProtocol.register_request(ResponseCodes.SERVERS_LIST)
+    @BaseProtocol.register_request(AuthResponseCodes.SERVERS_LIST)
     def _handle_servers_list(self, client_socket: socket,
                              request: Request) -> Request:
         self.logger.info(f"Successfully received servers list from auth "
@@ -93,7 +92,7 @@ class AuthProtocolHandler(BaseProtocol):
         request.payload = server.to_bytes()
         return request
 
-    @BaseProtocol.register_request(ResponseCodes.AES_KEY)
+    @BaseProtocol.register_request(AuthResponseCodes.AES_KEY)
     def _handle_get_aes_key(self, client_socket: socket,
                             request: Request) -> Request:
         # Do something with all the provided crap ffs:
@@ -110,13 +109,14 @@ class AuthProtocolHandler(BaseProtocol):
             enforce_len(self.client_key.encode('utf-8'), 255)).digest()
         decrypted_key = DecryptedKey.from_bytes(
             request.payload[16:112], cipher_key=cipher_key.hex())
+        self.shared_aes_key = decrypted_key.decrypted_aes
         print(f"DECRYPTED NONCE: {decrypted_key.decrypted_nonce}")
         # ticket = DecryptedTicket.from_bytes(
         #     data=request.payload[128:], cipher=shared_cipher)
 
         ticket = EncryptedTicket.from_bytes(request.payload[112:])
-        shared_cipher = AESCipher(decrypted_key.decrypted_aes.decode(),
-                                  iv=decrypted_key.shared_iv)
+        shared_cipher = AESCipher(self.shared_aes_key.decode(),
+                                       iv=decrypted_key.shared_iv)
         print(f"TICKET STUFF:\nVERSION: {ticket.version}\n"
               f"CLIENT_ID: {ticket.client_id}\nSERVER_ID: {ticket.server_id}\n"
               f"CREATION_TIME: {ticket.creation_time}\nSHARED_IV: "
@@ -133,7 +133,6 @@ class AuthProtocolHandler(BaseProtocol):
             authenticator.to_bytes(), cipher=shared_cipher)
 
         request.payload = authenticator.to_bytes() + request.payload[112:]
-        print(request.payload[128:])
         print(request.payload)
         return request
 
@@ -146,3 +145,26 @@ class AuthProtocolHandler(BaseProtocol):
         # 1. 16-32: IV --> create a cypher using this client password hash.
         # 2. 32-48: Nonce --> Decrypt Nonce using the cypher.
         # 3. 48-96: AES --> Decrypt "new" AES key.
+
+    @BaseProtocol.register_request(
+        MessagesServerResponseCodes.AUTHENTICATE_SUCCESS)
+    def _handle_success_msg_server_auth(self, client_socket: socket,
+                                        request: Request) -> Request:
+        self.logger.info(b64encode(request.payload).decode())
+        return request
+
+    @BaseProtocol.register_request(
+        MessagesServerResponseCodes.SEND_MESSAGE_SUCCESS)
+    def _handle_success_msg_server_auth(self, client_socket: socket,
+                                        request: Request) -> Request:
+        self.logger.info(b64encode(request.payload).decode())
+        return request
+
+    @BaseProtocol.register_request(
+        MessagesServerResponseCodes.GENERAL_ERROR)
+    def _handle_error_msg_server(self, client_socket: socket,
+                                 request: Request) -> Request:
+        self.logger.error(f"Received invalid status from messages server for"
+                          f"the last request. Error - "
+                          f"{b64encode(request.payload).decode()}")
+        return request

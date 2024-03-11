@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 import socket
+from base64 import b64decode
 from typing import List, Any, Dict, Tuple, Optional
 from client_side.auth_protocol_handler import AuthProtocolHandler
 from client_side.consts import RequestCodeTypes, AuthRequestCodes, \
@@ -10,7 +11,7 @@ from common.consts import AuthResponseCodes, MessagesServerResponseCodes
 from common.custom_exceptions import ServerDisconnectedError
 from common.file_handler import FileHandler
 from common.message_utils import unpack_server_message_headers
-from common.models import Request, Server
+from common.models import Request, Server, ClientMessage
 
 
 class Client:
@@ -48,6 +49,14 @@ class Client:
             # Assuming these were previously updated at the SERVERS_LIST step:
             self.client_socket.connect((self.server_ip, self.server_port))
             data['payload'] = request.payload
+        elif action == MessagesServerRequestCodes.SEND_MESSAGE:
+            # Assuming the client is already connected to the correct socket.
+            msg = ClientMessage.create(aes_key=self.protocol.shared_aes_key)
+            # decrypted_msg = EncryptedMessage.from_bytes(
+            #     msg.to_bytes(), aes_key=self.protocol.shared_aes_key)
+            # print(decrypted_msg)
+            data['payload'] = msg.to_bytes()
+
         return data
 
     def _handle_request(self, action: RequestCodeTypes,

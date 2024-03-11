@@ -315,7 +315,8 @@ class DecryptedAuthenticator(BaseAuthenticator):
     def from_bytes(data: bytes, cipher: AESCipher) -> DecryptedAuthenticator:
         return DecryptedAuthenticator(
             shared_iv=data[0:16],
-            version=int.from_bytes(cipher.decrypt(data[16:32]), byteorder='big'),
+            version=int.from_bytes(cipher.decrypt(data[16:32]),
+                                   byteorder='big'),
             client_id=cipher.decrypt(data[32:64]),
             server_id=cipher.decrypt(data[64:96]),
             creation_time=datetime.fromtimestamp(
@@ -355,3 +356,33 @@ class EncryptedAuthenticator(BaseAuthenticator):
             encrypted_server_id=enc_server_id,
             encrypted_creation_time=enc_creation_time
         )
+
+
+@dataclass
+class ClientMessage:
+    message_size: int
+    message_iv: bytes
+    message_content: bytes
+
+    @staticmethod
+    def create(aes_key: bytes) -> ClientMessage:
+        user_input = input("Please enter your message: ")
+        encoded_input = user_input.encode('utf-8')
+        msg_iv = AESCipher.create_iv()
+        cipher = AESCipher(key=aes_key.hex(), iv=msg_iv)
+        encrypted_content = cipher.encrypt(encoded_input)
+        message_size = len(encrypted_content)
+        return ClientMessage(message_size, msg_iv, encrypted_content)
+
+    def to_bytes(self) -> bytes:
+        message_size_bytes = self.message_size.to_bytes(4, byteorder='big')
+        return message_size_bytes + self.message_iv + self.message_content
+
+    @staticmethod
+    def from_bytes(data: bytes, aes_key: bytes) -> bytes:
+        message_size = int.from_bytes(data[:4], byteorder='big')
+        message_iv = data[4:20]
+        encrypted_content = data[20:20 + message_size]
+        cipher = AESCipher(key=aes_key.hex(), iv=message_iv)
+        decrypted_content = cipher.decrypt(encrypted_content)
+        return decrypted_content
