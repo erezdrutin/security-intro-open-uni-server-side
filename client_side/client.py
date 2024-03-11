@@ -10,7 +10,7 @@ from common.consts import AuthResponseCodes, MessagesServerResponseCodes
 from common.custom_exceptions import ServerDisconnectedError
 from common.file_handler import FileHandler
 from common.message_utils import unpack_server_message_headers
-from common.models import Request
+from common.models import Request, Server
 
 
 class Client:
@@ -33,33 +33,46 @@ class Client:
             client_id=self.client_id, client_name=self.client_name,
             client_password=self.client_password)
 
-    def _prepare_request(self, action: RequestCodeTypes) -> Dict[str, Any]:
+    def _prepare_request(self, action: RequestCodeTypes,
+                         request: Optional[Request]) -> Dict[str, Any]:
         """ Prepares the kwargs dict based on the action to perform. """
         data = {}
         if action == AuthRequestCodes.GET_AES_KEY:
             data['server_id'] = self.server_id
+        elif action == MessagesServerRequestCodes.AUTHENTICATE:
+            # Close AUTH SERVER client connection:
+            self.client_socket.close()
+            # Open a new client connection to MSG SERVER:
+            self.client_socket = socket.socket(socket.AF_INET,
+                                               socket.SOCK_STREAM)
+            # Assuming these were previously updated at the SERVERS_LIST step:
+            self.client_socket.connect((self.server_ip, self.server_port))
+            data['payload'] = request.payload
         return data
 
-    def _handle_request(self, action: RequestCodeTypes) -> Any:
+    def _handle_request(self, action: RequestCodeTypes,
+                        last_request: Optional[Request]) -> Any:
         """
         Handles communication with a single server until we either receive
         an error, the server side disconnects or we finished our
         "connection" with the server.
         """
         # Perform a request using the client socket:
-        kwargs = self._prepare_request(action=action)
+        kwargs = self._prepare_request(action=action, request=last_request)
         self.protocol.make_request(
             client_socket=self.client_socket,
             request=self.req_builder.create_request(action=action, **kwargs))
+
         # Determine whether current response belongs to Auth / Messages Server:
         res_type = AuthResponseCodes if isinstance(action, AuthRequestCodes) \
             else MessagesServerResponseCodes
+
         # handle incoming response:
         return self.protocol.handle_incoming_message(self.client_socket,
                                                      codes_type=res_type)
 
-    def _parse_incoming_messages(self, action: RequestCodeTypes,
-                                 request: Request) -> None:
+    def _parse_incoming_requests_results(self, action: RequestCodeTypes,
+                                         request: Request) -> None:
         if action == AuthRequestCodes.CLIENT_REGISTRATION and \
                 not self.client_id:
             # Update client id for all relevant dependencies:
@@ -68,6 +81,11 @@ class Client:
             # self.protocol.client_id = request.payload
         elif action == AuthRequestCodes.SERVER_REGISTRATION:
             self.server_id = request.payload
+        elif action == AuthRequestCodes.SERVERS_LIST:
+            server = Server.from_bytes(request.payload, version=CLIENT_VERSION)
+            self.server_ip = server.ip
+            self.server_port = server.port
+            self.server_id = server.id
 
     def start(self) -> None:
         """
@@ -79,9 +97,12 @@ class Client:
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_socket.connect((self.server_ip, self.server_port))
         try:
+            last_request = None
             for action in self.actions:
-                self._parse_incoming_messages(
-                    action=action, request=self._handle_request(action=action))
+                last_request = self._handle_request(
+                    action=action, last_request=last_request)
+                self._parse_incoming_requests_results(action=action,
+                                                      request=last_request)
         except (ConnectionResetError, BrokenPipeError,
                 ServerDisconnectedError) as err:
             # Server disconnected unexpectedly

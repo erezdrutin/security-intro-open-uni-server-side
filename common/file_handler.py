@@ -28,13 +28,13 @@ class FileHandler:
         if directory and not os.path.exists(directory):
             os.makedirs(directory)
 
-    def load_value(self, default_value=None) -> Union[str, None]:
+    def load_value(self, default_value=None, mode='r') -> Union[str, None]:
         """
         Load a single value (e.g., port) from the specified file.
         Returns a default value if the file is not found.
         """
         try:
-            with open(self.filepath, 'r') as file:
+            with open(self.filepath, mode) as file:
                 value = file.read().strip()
             return value
         except (FileNotFoundError, OSError):

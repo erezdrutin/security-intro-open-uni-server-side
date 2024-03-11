@@ -4,9 +4,7 @@ from typing import Tuple, Type, Callable, Dict, Any, TypeVar
 from common.custom_exceptions import ClientDisconnectedError
 
 # Creating a type variable that is bound to any class that can be instantiated
-from common.models import Request
-
-T = TypeVar('T')
+from common.models import Request, T
 
 
 def unpack_server_message_headers(client: socket) -> Tuple[int, int, int]:

@@ -7,15 +7,19 @@ based on functionality. However, in this case this seemed "excessive"
 compared to the requirements as is.
 """
 from __future__ import annotations
-from _socket import inet_aton
+
+import logging
+from _socket import inet_aton, inet_ntoa
 from base64 import b64encode, b64decode
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, TypeVar
 from datetime import datetime
 from common.consts import AuthRequestCodes, MessagesServerRequestCodes, \
     AuthResponseCodes, MessagesServerResponseCodes
 from common.aes_cipher import AESCipher
 from common.utils import dt_with_ttl_to_ts, convert_bytes_to_timestamp
+
+T = TypeVar('T')  # Generic type for data class
 
 
 @dataclass
@@ -48,6 +52,45 @@ class Server:
 
         # Concatenate all parts in the specified order
         return id_bytes + name_bytes + ip_bytes + port_bytes
+
+    @classmethod
+    def from_bytes(cls, data: bytes, version: int):
+        _id = data[:16]
+        name = data[16:271].rstrip(b'\x00').decode('utf-8')
+        ip = inet_ntoa(data[271:275])
+        port = int.from_bytes(data[275:277], 'big')
+        return cls(id=_id, name=name, ip=ip, port=port, version=version)
+
+    @staticmethod
+    def bytes_to_servers(payload: bytes, version: int) -> List[Server]:
+        server_size = 277
+        return [Server.from_bytes(payload[i:i + server_size], version) for i in
+                range(0, len(payload), server_size)]
+
+    @staticmethod
+    def select_server(servers: List[Server]) -> Server:
+        """
+        Takes in a list of servers and prompts the user for input. Returns
+        the server selected by the user. Assumes first server by default.
+        @param servers: A list of msg servers.
+        @return: The selected msg server.
+        """
+        if not servers:
+            logging.warning("No servers available, shutting down...")
+            raise ValueError(f"No msg servers available.")
+
+        print("Available servers:")
+        for i, server in enumerate(servers, start=1):
+            print(f"{i}. {server.name}")
+
+        selection = int(input("Select a server by number: ")) - 1
+        if 0 <= selection < len(servers):
+            logging.info(f"You selected: {servers[selection].name}")
+            return servers[selection]
+        else:
+            logging.warning("Invalid selection, defaulting to first "
+                            "server on the list.")
+            return servers[0]
 
 
 @dataclass
@@ -130,7 +173,7 @@ class DecryptedKey(BaseKey):
         cipher = AESCipher(key=cipher_key, iv=shared_iv)
         # Decrypt the encrypted values:
         nonce = cipher.decrypt(encrypted_nonce)
-        shared_aes_key = cipher.decrypt(encrypted_aes)
+        shared_aes_key = b64encode(cipher.decrypt(encrypted_aes))
 
         return DecryptedKey(shared_iv=shared_iv, decrypted_nonce=nonce,
                             decrypted_aes=shared_aes_key)
@@ -151,7 +194,7 @@ class EncryptedKey(BaseKey):
     def create(shared_iv: bytes, shared_aes_key: str, nonce: bytes,
                cipher: AESCipher):
         encrypted_nonce = cipher.encrypt(nonce)
-        client_encrypted_aes = cipher.encrypt(shared_aes_key.encode('utf-8'))
+        client_encrypted_aes = cipher.encrypt(b64decode(shared_aes_key))
         return EncryptedKey(shared_iv=shared_iv,
                             encrypted_nonce=encrypted_nonce,
                             encrypted_aes=client_encrypted_aes)
@@ -168,7 +211,7 @@ class BaseTicket:
 
 @dataclass
 class DecryptedTicket(BaseTicket):
-    decrypted_aes_key: str
+    decrypted_aes_key: bytes
     decrypted_expiration_time: datetime
 
     @staticmethod
@@ -185,7 +228,7 @@ class DecryptedTicket(BaseTicket):
         # encrypted_expiration_time is 16 bytes, from the end
         encrypted_expiration_time = data[len(data) - 16:]
 
-        aes_key = b64encode(cipher.decrypt(encrypted_aes_key)).decode('utf-8')
+        aes_key = b64encode(cipher.decrypt(encrypted_aes_key))
         expiration_time = convert_bytes_to_timestamp(cipher.decrypt(
             encrypted_expiration_time))
 
@@ -259,27 +302,26 @@ class EncryptedTicket(BaseTicket):
 @dataclass
 class BaseAuthenticator:
     shared_iv: bytes
-    version: bytes
-    client_id: bytes
-    server_id: bytes
-    creation_time: bytes
 
 
 @dataclass
 class DecryptedAuthenticator(BaseAuthenticator):
+    version: int
+    client_id: bytes
+    server_id: bytes
+    creation_time: datetime
+
     @staticmethod
     def from_bytes(data: bytes, cipher: AESCipher) -> DecryptedAuthenticator:
-        shared_iv = data[0:16]
-        enc_version = data[16:24]
-        enc_client_id = data[24:40]
-        enc_server_id = data[40:56]
-        enc_creation_time = data[56:64]
-
         return DecryptedAuthenticator(
-            shared_iv=shared_iv, version=cipher.decrypt(enc_version),
-            client_id=cipher.decrypt(enc_client_id),
-            server_id=cipher.decrypt(enc_server_id),
-            creation_time=cipher.decrypt(enc_creation_time))
+            shared_iv=data[0:16],
+            version=int.from_bytes(cipher.decrypt(data[16:32]), byteorder='big'),
+            client_id=cipher.decrypt(data[32:64]),
+            server_id=cipher.decrypt(data[64:96]),
+            creation_time=datetime.fromtimestamp(
+                int.from_bytes(cipher.decrypt(data[96:112]), byteorder='big')
+            )
+        )
 
 
 @dataclass
@@ -288,6 +330,13 @@ class EncryptedAuthenticator(BaseAuthenticator):
     encrypted_client_id: bytes
     encrypted_server_id: bytes
     encrypted_creation_time: bytes
+
+    def to_bytes(self) -> bytes:
+        return self.shared_iv + \
+               self.encrypted_version + \
+               self.encrypted_client_id + \
+               self.encrypted_server_id + \
+               self.encrypted_creation_time
 
     @staticmethod
     def create(version: int, client_id: bytes, server_id: bytes,

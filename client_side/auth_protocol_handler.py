@@ -2,7 +2,7 @@ import logging
 import socket
 from base64 import b64encode
 from hashlib import sha256
-from typing import Any
+from typing import Any, Union
 
 from auth_server.consts import ResponseCodes
 from client_side.consts import CLIENT_VERSION, ME_FILE_PATH
@@ -11,7 +11,8 @@ from common.consts import AuthRequestCodes, AuthResponseCodes
 from common.file_handler import FileHandler
 from common.message_utils import unpack_server_message_headers, unpack_message
 from common.models import Request, Response, EncryptedKey, DecryptedKey, \
-    DecryptedTicket, EncryptedTicket
+    DecryptedTicket, EncryptedTicket, Server, EncryptedAuthenticator, \
+    DecryptedAuthenticator
 from common.base_protocol import BaseProtocol
 from common.utils import enforce_len
 
@@ -84,8 +85,12 @@ class AuthProtocolHandler(BaseProtocol):
     def _handle_servers_list(self, client_socket: socket,
                              request: Request) -> Request:
         self.logger.info(f"Successfully received servers list from auth "
-                         f"server: {request.payload}")
-        print(request.payload)
+                         f"server...")
+        servers = Server.bytes_to_servers(payload=request.payload,
+                                          version=self.version)
+        server = Server.select_server(servers=servers)
+        # Overriding the request's payload with the selected server:
+        request.payload = server.to_bytes()
         return request
 
     @BaseProtocol.register_request(ResponseCodes.AES_KEY)
@@ -104,18 +109,33 @@ class AuthProtocolHandler(BaseProtocol):
         cipher_key = sha256(
             enforce_len(self.client_key.encode('utf-8'), 255)).digest()
         decrypted_key = DecryptedKey.from_bytes(
-            request.payload[16:128], cipher_key=cipher_key.hex())
+            request.payload[16:112], cipher_key=cipher_key.hex())
         print(f"DECRYPTED NONCE: {decrypted_key.decrypted_nonce}")
-        shared_cipher = AESCipher(decrypted_key.decrypted_aes.hex())
         # ticket = DecryptedTicket.from_bytes(
         #     data=request.payload[128:], cipher=shared_cipher)
 
-        ticket = EncryptedTicket.from_bytes(request.payload[128:])
+        ticket = EncryptedTicket.from_bytes(request.payload[112:])
+        shared_cipher = AESCipher(decrypted_key.decrypted_aes.decode(),
+                                  iv=decrypted_key.shared_iv)
         print(f"TICKET STUFF:\nVERSION: {ticket.version}\n"
               f"CLIENT_ID: {ticket.client_id}\nSERVER_ID: {ticket.server_id}\n"
               f"CREATION_TIME: {ticket.creation_time}\nSHARED_IV: "
               f"{ticket.ticket_iv}\nENC_AES_KEY: {ticket.encrypted_aes_key}\n"
               f"ENC_TICKET_TTL: {ticket.encrypted_expiration_time}")
+
+        authenticator = EncryptedAuthenticator.create(
+            version=request.version, client_id=request.client_id,
+            server_id=ticket.server_id, creation_time=ticket.creation_time,
+            shared_iv=ticket.ticket_iv, cipher=shared_cipher
+        )
+
+        decrypted_auth = DecryptedAuthenticator.from_bytes(
+            authenticator.to_bytes(), cipher=shared_cipher)
+
+        request.payload = authenticator.to_bytes() + request.payload[112:]
+        print(request.payload[128:])
+        print(request.payload)
+        return request
 
         # Construct an Authenticator and pass the Ticket "as is":
         # 1. 16 Bytes - Client ID, can be dropped
@@ -126,6 +146,3 @@ class AuthProtocolHandler(BaseProtocol):
         # 1. 16-32: IV --> create a cypher using this client password hash.
         # 2. 32-48: Nonce --> Decrypt Nonce using the cypher.
         # 3. 48-96: AES --> Decrypt "new" AES key.
-
-        print(request.payload)
-        return request

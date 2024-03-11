@@ -8,14 +8,15 @@ interactions between the Server and our sqlite database.
 
 import sqlite3
 from datetime import datetime
-from typing import List, Union, Type, Dict, Any
+from typing import List, Union, Type, Dict, Any, Optional
 import common.models as models
 import logging
 
 
 class DatabaseHandler:
     def __init__(self, db_file: str, config: Dict[str, Any],
-                 logger: logging.Logger, client_tbl: str, servers_tbl: str):
+                 logger: logging.Logger, client_tbl: Optional[str] = '',
+                 servers_tbl: Optional[str] = ''):
         """
         @param db_file: A path to the file in which the DB is stored.
         @param config: A dict that is expected to be formatted as follows:
@@ -25,6 +26,9 @@ class DatabaseHandler:
                 "data_class": "Matching dataclass name to table values"
             }
         }
+        @param logger: A logger to use to log messages.
+        @param client_tbl: An optional table of clients.
+        @param servers_tbl: An optional table of messages servers.
         """
         self.db_file = db_file
         self.config = config
@@ -33,7 +37,12 @@ class DatabaseHandler:
         self.logger = logger
 
     def _connect(self):
-        return sqlite3.connect(self.db_file)
+        # Set a busy timeout of 20 seconds
+        conn = sqlite3.connect(self.db_file, timeout=20)
+        # Enable WAL mode (Write ahead logging for read & writes to proceed
+        # concurrently by writing changes to a log file first:
+        conn.execute('PRAGMA journal_mode=WAL;')
+        return conn
 
     def table_exists(self, table_name: str) -> bool:
         query = f"SELECT count(name) FROM sqlite_master WHERE type='table' " \
@@ -66,8 +75,9 @@ class DatabaseHandler:
                                 f"the query: {query}. Exception: {err}")
             raise err
 
-    def perform_query_to_data_model(self, query: str, data_class: Type, *args,
-                                    **kwargs) -> List[Any]:
+    def perform_query_to_data_model(
+            self, query: str, data_class: Type[models.T], *args,
+            **kwargs) -> List[Any]:
         """
         Receives a query and a dataclass to convert the query results to.
         Returns the result of the execution of the query as dataclass
@@ -202,8 +212,8 @@ class DatabaseHandler:
         Receives a server id and attempts to fetch it from the DB.
         Returns either a client_side instance or None if failed to find one.
         Letting the code "crash" in case of failure.
-        @param server_id: The id of the client_side to fetch.
-        @return: A client_side instantiated dataclass instance.
+        @param server_id: The id of the server to fetch.
+        @return: A server instantiated dataclass instance.
         """
         results = self.perform_query_to_data_model(
             query=self.config[self.servers_tbl].get('get_server_by_id'),

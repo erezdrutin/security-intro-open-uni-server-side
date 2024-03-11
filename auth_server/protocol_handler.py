@@ -169,15 +169,14 @@ class ProtocolHandler(BaseProtocol):
         #     f"\nnew_aes: {b64encode(cipher.decrypt(client_encrypted_aes))}")
 
         # encrypted_from_bytes = EncryptedKey.from_bytes(encrypted_key, cipher)
-
         # Ticket construction (with messages server key):
         server = self.db_handler.get_server_by_id(server_id=server_id)
-        cipher = AESCipher(server.aes_key.hex())
-        server_encrypted_aes = cipher.encrypt(b64decode(shared_aes_key))
+        cipher = AESCipher(server.aes_key.hex(), iv=shared_iv)
         creation_time = datetime.now()
-        expiration_ts = dt_with_ttl_to_ts(creation_time, TICKET_TTL_SEC)
-        encrypted_expiration = cipher.encrypt(
-            expiration_ts.to_bytes(8, byteorder='big'))
+        # server_encrypted_aes = cipher.encrypt(b64decode(shared_aes_key))
+        # expiration_ts = dt_with_ttl_to_ts(creation_time, TICKET_TTL_SEC)
+        # encrypted_expiration = cipher.encrypt(
+        #     expiration_ts.to_bytes(8, byteorder='big'))
 
         ticket = EncryptedTicket.create(
             version=self.version, client_id=request.client_id,
@@ -185,13 +184,13 @@ class ProtocolHandler(BaseProtocol):
             shared_iv=shared_iv, aes_key=shared_aes_key,
             ticket_ttl_sec=TICKET_TTL_SEC, cipher=cipher)
 
-        print("––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––")
-        print(f"TICKET STUFF:\nVERSION: {ticket.version}\n"
-              f"CLIENT_ID: {ticket.client_id}\nSERVER_ID: {ticket.server_id}\n"
-              f"CREATION_TIME: {ticket.creation_time}\nSHARED_IV: "
-              f"{ticket.ticket_iv}\nAES_KEY: {shared_aes_key}\n"
-              f"TICKET_TTL: {TICKET_TTL_SEC}")
-        print("TICKET TO BYTES: ", ticket.to_bytes())
+        # print("––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––")
+        # print(f"TICKET STUFF:\nVERSION: {ticket.version}\n"
+        #       f"CLIENT_ID: {ticket.client_id}\nSERVER_ID: {ticket.server_id}\n"
+        #       f"CREATION_TIME: {ticket.creation_time}\nSHARED_IV: "
+        #       f"{ticket.ticket_iv}\nAES_KEY: {shared_aes_key}\n"
+        #       f"TICKET_TTL: {TICKET_TTL_SEC}")
+        # print("TICKET TO BYTES: ", ticket.to_bytes())
 
         # Ticket:
         # 1 byte ~ Version
@@ -201,22 +200,22 @@ class ProtocolHandler(BaseProtocol):
         # 16 Bytes ~ Ticket IV (==shared IV)
         # 32 Bytes ~ AES Key (==shared key), encrypted with server AES(!)
         # 8 bytes ~ Expiration Time, encrypted with server AES(!)
-        ticket_2 = \
-            server.version.to_bytes(1, byteorder='big') + \
-            request.client_id[:16].ljust(16, b'\x00') + \
-            server.id[:16].ljust(16, b'\x00') + \
-            int(creation_time.timestamp()).to_bytes(8, byteorder='big') + \
-            shared_iv + \
-            server_encrypted_aes + \
-            encrypted_expiration
+        # ticket_2 = \
+        #     server.version.to_bytes(1, byteorder='big') + \
+        #     request.client_id[:16].ljust(16, b'\x00') + \
+        #     server.id[:16].ljust(16, b'\x00') + \
+        #     int(creation_time.timestamp()).to_bytes(8, byteorder='big') + \
+        #     shared_iv + \
+        #     server_encrypted_aes + \
+        #     encrypted_expiration
 
-        print(ticket_2)
-        print(ticket.to_bytes() == ticket_2)
-        decrypted_ticket = DecryptedTicket.from_bytes(ticket_2, cipher)
-        self.logger.debug(f"ticket --> {ticket}")
-        self.logger.debug(
-            f"decrypted values:\naes: {cipher.decrypt(server_encrypted_aes)}"
-            f"\nexpiration_timestamp: {cipher.decrypt(encrypted_expiration)}")
+        # print(ticket_2)
+        # print(ticket.to_bytes() == ticket_2)
+        decrypted_ticket = DecryptedTicket.from_bytes(ticket.to_bytes(), cipher)
+        # self.logger.debug(f"ticket --> {ticket}")
+        # self.logger.debug(
+        #     f"decrypted values:\naes: {cipher.decrypt(server_encrypted_aes)}"
+        #     f"\nexpiration_timestamp: {cipher.decrypt(encrypted_expiration)}")
 
         payload = request.client_id + encrypted_key.to_bytes() + ticket.to_bytes()
         response = Response(

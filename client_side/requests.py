@@ -2,9 +2,10 @@ import logging
 from random import randint
 from socket import inet_aton
 from secrets import token_bytes
+from typing import Union
 from common.aes_cipher import AESCipher
 from common.base_protocol import RequestCodesType
-from common.consts import AuthRequestCodes
+from common.consts import AuthRequestCodes, MessagesServerRequestCodes
 from common.models import Request
 from common.utils import enforce_len
 
@@ -23,11 +24,14 @@ class RequestFactory:
             case AuthRequestCodes.CLIENT_REGISTRATION:
                 res = self._build_auth_client_registration_request(**kwargs)
             case AuthRequestCodes.SERVER_REGISTRATION:
-                res = self._build_auth_server_registration_request(**kwargs)
+                res = self._build_auth_msg_server_registration_request(
+                    **kwargs)
             case AuthRequestCodes.SERVERS_LIST:
                 res = self._build_get_servers_request(**kwargs)
             case AuthRequestCodes.GET_AES_KEY:
                 res = self._build_get_aes_key_request(**kwargs)
+            case MessagesServerRequestCodes.AUTHENTICATE:
+                res = self._build_authenticate_msg_server_request(**kwargs)
             case _:
                 self.logger.error(f"Received an invalid request code to "
                                   f"construct - {action}")
@@ -50,11 +54,11 @@ class RequestFactory:
             payload=payload
         )
 
-    def _build_auth_server_registration_request(self, **kwargs) -> Request:
+    def _build_auth_msg_server_registration_request(self, **kwargs) -> Request:
         """ Creates a server registration request. """
         padded_name = enforce_len(self.client_name.encode('utf-8'), 255)
-        padded_aes = enforce_len(AESCipher.create_aes_key().encode(
-            'utf-8'), 32)
+        padded_aes = enforce_len(AESCipher.create_aes_key().encode('utf-8'),
+                                 32)
         ip_bytes = inet_aton('0.0.0.0')
         port_bytes = randint(1000, 9999).to_bytes(2, byteorder='big')
         payload = padded_name + padded_aes + ip_bytes + port_bytes
@@ -88,4 +92,17 @@ class RequestFactory:
             version=self.version,
             code=AuthRequestCodes.GET_AES_KEY,
             payload=payload
+        )
+
+    def _build_authenticate_msg_server_request(self, **kwargs) -> Request:
+        """ Builds "AUTHENTICATE" msg server request. """
+        if 'payload' not in kwargs:
+            msg = "Can't authenticate with Messages Server without a payload"
+            self.logger.error(msg)
+            raise ValueError(msg)
+        return Request(
+            client_id=self.client_id,
+            version=self.version,
+            code=MessagesServerRequestCodes.AUTHENTICATE,
+            payload=kwargs['payload']
         )
