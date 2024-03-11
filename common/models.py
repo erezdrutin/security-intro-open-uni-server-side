@@ -39,6 +39,10 @@ class Server:
     version: int
     aes_key: Optional[bytes] = None
 
+    def __str__(self) -> str:
+        return (f"id: {self.id.hex()}, name: {self.name}, ip: {self.ip}, "
+                f"port: {self.port}, version: {self.version})")
+
     def to_bytes(self) -> bytes:
         """ Returns a byte sequence representation for the Server dataclass.
         The byte sequence representation DOES NOT INCLUDE AES KEY."""
@@ -312,9 +316,11 @@ class DecryptedAuthenticator(BaseAuthenticator):
     creation_time: datetime
 
     @staticmethod
-    def from_bytes(data: bytes, cipher: AESCipher) -> DecryptedAuthenticator:
+    def from_bytes(data: bytes, aes_key: str) -> DecryptedAuthenticator:
+        iv = data[0:16]
+        cipher = AESCipher(aes_key, iv=iv)
         return DecryptedAuthenticator(
-            shared_iv=data[0:16],
+            shared_iv=iv,
             version=int.from_bytes(cipher.decrypt(data[16:32]),
                                    byteorder='big'),
             client_id=cipher.decrypt(data[32:64]),

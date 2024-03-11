@@ -1,7 +1,6 @@
 from __future__ import annotations
 import logging
 import socket
-from base64 import b64decode
 from typing import List, Any, Dict, Tuple, Optional
 from client_side.auth_protocol_handler import AuthProtocolHandler
 from client_side.consts import RequestCodeTypes, AuthRequestCodes, \
@@ -10,7 +9,6 @@ from client_side.requests import RequestFactory
 from common.consts import AuthResponseCodes, MessagesServerResponseCodes
 from common.custom_exceptions import ServerDisconnectedError
 from common.file_handler import FileHandler
-from common.message_utils import unpack_server_message_headers
 from common.models import Request, Server, ClientMessage
 
 
@@ -40,6 +38,7 @@ class Client:
         data = {}
         if action == AuthRequestCodes.GET_AES_KEY:
             data['server_id'] = self.server_id
+            data['nonce'] = self.protocol.nonce
         elif action == MessagesServerRequestCodes.AUTHENTICATE:
             # Close AUTH SERVER client connection:
             self.client_socket.close()

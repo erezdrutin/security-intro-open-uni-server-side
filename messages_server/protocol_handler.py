@@ -60,10 +60,8 @@ class ProtocolHandler(BaseProtocol):
         self.logger.debug(f"successfully decrypted ticket: {ticket}")
 
         # Decrypt authenticator from request:
-        shared_cipher = AESCipher(ticket.decrypted_aes_key.decode(),
-                                  iv=ticket.ticket_iv)
         authenticator = DecryptedAuthenticator.from_bytes(
-            data=authenticator_bytes, cipher=shared_cipher)
+            data=authenticator_bytes, aes_key=ticket.decrypted_aes_key.decode())
         self.logger.debug(f"successfully decrypted auth: {authenticator}")
 
         # Handle invalid ticket-authenticator combination:

@@ -5,4 +5,4 @@ from server_common.consts import *
 RequestCodes = MessagesServerRequestCodes
 ResponseCodes = MessagesServerResponseCodes
 
-MSG_SERVER_ID = b'V\x18\xe0/\xf3-J_\x90>t^\x8f\xe1\x05\xf4'
+MSG_SERVER_ID = b'\xefZM?\xdbrO\x7f\x8e\xe0\x80)\x8d\xbf\xf5z'

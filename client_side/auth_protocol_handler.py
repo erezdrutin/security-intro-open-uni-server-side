@@ -2,6 +2,7 @@ import logging
 import socket
 from base64 import b64encode
 from hashlib import sha256
+from secrets import token_bytes
 from typing import Any
 
 from client_side.consts import CLIENT_VERSION, ME_FILE_PATH
@@ -23,6 +24,7 @@ class AuthProtocolHandler(BaseProtocol):
         self.client_name = client_name
         self.client_key = client_key
         self.shared_aes_key = None
+        self.nonce = token_bytes(8)
 
     @staticmethod
     def make_request(client_socket: socket.socket, request: Request) -> None:
@@ -95,69 +97,57 @@ class AuthProtocolHandler(BaseProtocol):
     @BaseProtocol.register_request(AuthResponseCodes.AES_KEY)
     def _handle_get_aes_key(self, client_socket: socket,
                             request: Request) -> Request:
-        # Do something with all the provided crap ffs:
-        self.logger.info(f"Successfully fetched AES / Ticket keys from auth "
-                         f"server: {request.payload}")
-
-        if not request.payload[0:16] == self.client_id:
+        client_bytes = request.payload[0:16]
+        encrypted_key_bytes = request.payload[16:112]
+        encrypted_ticket_bytes = request.payload[112:]
+        # If for some reason we received a different client - throw an error:
+        if not client_bytes == self.client_id:
             raise ValueError(f"Received invalid client id in payload!")
 
-        # DECRYPT key from request
-        # encrypted_key_iv = request.payload[17:33]
-        # cipher = AESCipher(key=self.client_key, iv=encrypted_key_iv)
+        # Decrypt the "Encrypted Key" from the request:
         cipher_key = sha256(
             enforce_len(self.client_key.encode('utf-8'), 255)).digest()
         decrypted_key = DecryptedKey.from_bytes(
-            request.payload[16:112], cipher_key=cipher_key.hex())
+            encrypted_key_bytes, cipher_key=cipher_key.hex())
         self.shared_aes_key = decrypted_key.decrypted_aes
-        print(f"DECRYPTED NONCE: {decrypted_key.decrypted_nonce}")
-        # ticket = DecryptedTicket.from_bytes(
-        #     data=request.payload[128:], cipher=shared_cipher)
 
-        ticket = EncryptedTicket.from_bytes(request.payload[112:])
+        # If for some reason the nonce is invalid - throw an error:
+        if decrypted_key.decrypted_nonce != self.nonce:
+            err_msg = f"Received an invalid nonce from server! Expected " \
+                      f"nonce: {self.nonce}, received nonce: " \
+                      f"{decrypted_key.decrypted_nonce}"
+            self.logger.error(err_msg)
+            raise ValueError(err_msg)
+
+        # Create an encrypted ticket and an authenticator based on payload:
+        ticket = EncryptedTicket.from_bytes(encrypted_ticket_bytes)
+        authenticator_iv = AESCipher.create_iv()
         shared_cipher = AESCipher(self.shared_aes_key.decode(),
-                                       iv=decrypted_key.shared_iv)
-        print(f"TICKET STUFF:\nVERSION: {ticket.version}\n"
-              f"CLIENT_ID: {ticket.client_id}\nSERVER_ID: {ticket.server_id}\n"
-              f"CREATION_TIME: {ticket.creation_time}\nSHARED_IV: "
-              f"{ticket.ticket_iv}\nENC_AES_KEY: {ticket.encrypted_aes_key}\n"
-              f"ENC_TICKET_TTL: {ticket.encrypted_expiration_time}")
-
+                                  iv=authenticator_iv)
         authenticator = EncryptedAuthenticator.create(
             version=request.version, client_id=request.client_id,
             server_id=ticket.server_id, creation_time=ticket.creation_time,
-            shared_iv=ticket.ticket_iv, cipher=shared_cipher
+            shared_iv=authenticator_iv, cipher=shared_cipher
         )
 
-        decrypted_auth = DecryptedAuthenticator.from_bytes(
-            authenticator.to_bytes(), cipher=shared_cipher)
-
-        request.payload = authenticator.to_bytes() + request.payload[112:]
-        print(request.payload)
+        # concatenate the payload and return for further processing:
+        request.payload = authenticator.to_bytes() + encrypted_ticket_bytes
         return request
-
-        # Construct an Authenticator and pass the Ticket "as is":
-        # 1. 16 Bytes - Client ID, can be dropped
-        # 2."Encrypted Key": ClientID (16) + enc_Nonce (16) + enc_AES (48).
-        # 3. "Ticket": All after #2, pass "as is".
-
-        # Focus on #2 for a sec (bits 16-...):
-        # 1. 16-32: IV --> create a cypher using this client password hash.
-        # 2. 32-48: Nonce --> Decrypt Nonce using the cypher.
-        # 3. 48-96: AES --> Decrypt "new" AES key.
 
     @BaseProtocol.register_request(
         MessagesServerResponseCodes.AUTHENTICATE_SUCCESS)
     def _handle_success_msg_server_auth(self, client_socket: socket,
                                         request: Request) -> Request:
-        self.logger.info(b64encode(request.payload).decode())
+        self.logger.info(
+            "Managed to successfully authenticate with Messages Server.")
         return request
 
     @BaseProtocol.register_request(
         MessagesServerResponseCodes.SEND_MESSAGE_SUCCESS)
     def _handle_success_msg_server_auth(self, client_socket: socket,
                                         request: Request) -> Request:
-        self.logger.info(b64encode(request.payload).decode())
+        self.logger.info("Managed to successfully send a message to the "
+                         "Messages Server and received a valid response.")
         return request
 
     @BaseProtocol.register_request(
@@ -166,5 +156,5 @@ class AuthProtocolHandler(BaseProtocol):
                                  request: Request) -> Request:
         self.logger.error(f"Received invalid status from messages server for"
                           f"the last request. Error - "
-                          f"{b64encode(request.payload).decode()}")
+                          f"{request.payload.decode('utf-8')}")
         return request

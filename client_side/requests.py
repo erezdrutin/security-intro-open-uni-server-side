@@ -1,8 +1,6 @@
 import logging
 from random import randint
 from socket import inet_aton
-from secrets import token_bytes
-from typing import Union
 from common.aes_cipher import AESCipher
 from common.base_protocol import RequestCodesType
 from common.consts import AuthRequestCodes, MessagesServerRequestCodes
@@ -83,11 +81,11 @@ class RequestFactory:
     def _build_get_aes_key_request(self, **kwargs) -> Request:
         """ Creates a get AES Key request based on the provided server via
         the method's kwargs. """
-        if 'server_id' not in kwargs:
+        if any(key not in kwargs for key in ['server_id', 'nonce']):
             raise ValueError(f"Can't create a get AES request without a "
-                             f"server id.")
+                             f"server id / nonce.")
         padded_server_id = enforce_len(kwargs['server_id'], 16)
-        padded_nonce = enforce_len(token_bytes(8), 8)
+        padded_nonce = enforce_len(kwargs['nonce'], 8)
         payload = padded_server_id + padded_nonce
         return Request(
             client_id=self.client_id,
