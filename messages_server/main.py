@@ -1,7 +1,7 @@
 """
 Author: Erez Drutin
-Date: 04.11.2023
-Purpose: Execute the program. This is the entry point for our messages_server code.
+Date: 11.03.2024
+Purpose: Act as the entry point for the messages' server execution process.
 """
 from messages_server.consts import MESSAGE_SERVERS_TABLE, DB_CONFIG, \
     DB_FILE_PATH, MSG_SERVER_ID

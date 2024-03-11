@@ -1,3 +1,8 @@
+"""
+Author: Erez Drutin
+Date: 11.03.2024
+Purpose: Define all available requests that can be created by the client.
+"""
 import logging
 from random import randint
 from socket import inet_aton
@@ -11,6 +16,14 @@ from common.utils import enforce_len
 class RequestFactory:
     def __init__(self, version: int, logger: logging.Logger, client_id: bytes,
                  client_name: str, client_password: str):
+        """
+        Initializes a new RequestFactory.
+        @param version: The version of the request.
+        @param logger: A logger to use for logging.
+        @param client_id: A client id to use for requests.
+        @param client_name: A client name to pass in requests.
+        @param client_password: A client password to pass in requests
+        """
         self.version = version
         self.logger = logger
         self.client_id = client_id
@@ -18,6 +31,12 @@ class RequestFactory:
         self.client_password = client_password
 
     def create_request(self, action: RequestCodesType, **kwargs) -> Request:
+        """
+        Creates a request based on the provided action and kwargs.
+        @param action: The action to perform.
+        @param kwargs: Additional arguments to pass to the request.
+        @return: A constructed Request.
+        """
         match action:
             case AuthRequestCodes.CLIENT_REGISTRATION:
                 res = self._build_auth_client_registration_request(**kwargs)
@@ -41,7 +60,11 @@ class RequestFactory:
         return res
 
     def _build_auth_client_registration_request(self, **kwargs) -> Request:
-        """ Creates a client registration request. """
+        """
+        Creates a client registration request.
+        @param kwargs: Additional arguments to pass to the request.
+        @return: A constructed Request.
+        """
         padded_name = enforce_len(self.client_name.encode('utf-8'), 255)
         padded_password = enforce_len(self.client_password.encode('utf-8'),
                                       255)
@@ -55,7 +78,11 @@ class RequestFactory:
         )
 
     def _build_auth_msg_server_registration_request(self, **kwargs) -> Request:
-        """ Creates a server registration request. """
+        """
+        Creates a message server registration request.
+        @param kwargs: Additional arguments to pass to the request.
+        @return: A constructed Request.
+        """
         padded_name = enforce_len(self.client_name.encode('utf-8'), 255)
         padded_aes = enforce_len(AESCipher.create_aes_key().encode('utf-8'),
                                  32)
@@ -70,7 +97,11 @@ class RequestFactory:
         )
 
     def _build_get_servers_request(self, **kwargs) -> Request:
-        """ Creates a get servers request. """
+        """
+        Creates a get servers request.
+        @param kwargs: Additional arguments to pass to the request.
+        @return: A constructed Request.
+        """
         return Request(
             client_id=self.client_id,
             version=self.version,
@@ -79,8 +110,11 @@ class RequestFactory:
         )
 
     def _build_get_aes_key_request(self, **kwargs) -> Request:
-        """ Creates a get AES Key request based on the provided server via
-        the method's kwargs. """
+        """
+        Creates a get AES key request.
+        @param kwargs: Additional arguments to pass to the request.
+        @return: A constructed Request.
+        """
         if any(key not in kwargs for key in ['server_id', 'nonce']):
             raise ValueError(f"Can't create a get AES request without a "
                              f"server id / nonce.")
@@ -95,7 +129,11 @@ class RequestFactory:
         )
 
     def _build_authenticate_msg_server_request(self, **kwargs) -> Request:
-        """ Builds "AUTHENTICATE" msg server request. """
+        """
+        Builds "AUTHENTICATE" msg server request.
+        @param kwargs: Additional arguments to pass to the request.
+        @return: A constructed Request.
+        """
         if 'payload' not in kwargs:
             msg = "Can't authenticate with Messages Server without a payload"
             self.logger.error(msg)
@@ -108,7 +146,11 @@ class RequestFactory:
         )
 
     def _build_send_message_to_msg_server_request(self, **kwargs) -> Request:
-        """ Builds "SEND MESSAGE" msg server request. """
+        """
+        Builds "SEND_MESSAGE" msg server request.
+        @param kwargs: Additional arguments to pass to the request.
+        @return: A constructed Request.
+        """
         if 'payload' not in kwargs:
             msg = "Can't send a message to Messages Server without user input"
             self.logger.error(msg)

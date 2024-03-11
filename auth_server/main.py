@@ -1,7 +1,7 @@
 """
 Author: Erez Drutin
-Date: 04.11.2023
-Purpose: Execute the program. This is the entry point for our messages_server code.
+Date: 11.03.2024
+Purpose: Act as the main entry point for the auth server execution process.
 """
 from auth_server.consts import CLIENTS_TABLE, MESSAGE_SERVERS_TABLE, \
     DB_CONFIG, DB_FILE_PATH

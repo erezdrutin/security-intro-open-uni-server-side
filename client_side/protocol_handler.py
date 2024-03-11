@@ -1,24 +1,37 @@
+"""
+Author: Erez Drutin
+Date: 11.03.2024
+Purpose: Act as the protocol used by the client to communicate with the
+different servers (auth/messages). The protocol defines how the client is
+expected to behave based on different request codes passed by the servers.
+"""
 import logging
 import socket
 from base64 import b64encode
 from hashlib import sha256
 from secrets import token_bytes
 from typing import Any
-
 from client_side.consts import CLIENT_VERSION, ME_FILE_PATH
 from common.aes_cipher import AESCipher
 from common.consts import AuthResponseCodes, MessagesServerResponseCodes
 from common.file_handler import FileHandler
 from common.message_utils import unpack_server_message_headers, unpack_message
 from common.models import Request, DecryptedKey, EncryptedTicket, Server, \
-    EncryptedAuthenticator, DecryptedAuthenticator
+    EncryptedAuthenticator
 from common.base_protocol import BaseProtocol
 from common.utils import enforce_len
 
 
-class AuthProtocolHandler(BaseProtocol):
+class ProtocolHandler(BaseProtocol):
     def __init__(self, logger: logging.Logger, client_id: bytes,
                  client_key: str, client_name: str):
+        """
+        Initialize the protocol handler.
+        @param logger: A logger to use.
+        @param client_id: The client's id.
+        @param client_key: The client's key.
+        @param client_name: The client's name.
+        """
         super().__init__(logger=logger, version=CLIENT_VERSION)
         self.client_id = client_id
         self.client_name = client_name
@@ -28,15 +41,21 @@ class AuthProtocolHandler(BaseProtocol):
 
     @staticmethod
     def make_request(client_socket: socket.socket, request: Request) -> None:
-        """ Receives a socket to pass messages through and makes a request. """
+        """
+        Sends a request to the server.
+        @param client_socket: A socket we can pass messages through.
+        @param request: The request to send.
+        """
         bytes_res = request.to_bytes()
         client_socket.sendall(bytes_res)
 
     def handle_incoming_message(self, client_socket: socket, **kwargs) -> Any:
         """
-        Handles an incoming request from client side.
-        @param client_socket: A socket we can pass messages through.
-        @return: Returns the result of the handler's execution.
+        Handle an incoming message from the server.
+        @param client_socket: The client's socket.
+        @param kwargs: Additional arguments.
+        @return: The response to the message, after being handled via one of
+        the handlers defined below.
         """
         version, code, payload_size = unpack_server_message_headers(
             client=client_socket)
@@ -59,8 +78,13 @@ class AuthProtocolHandler(BaseProtocol):
     @BaseProtocol.register_request(AuthResponseCodes.REGISTRATION_SUCCESS)
     def _handle_registration_success(self, client_socket: socket,
                                      request: Request) -> Request:
-        """ In case of successful client / server registration - log the
-        success and continue to handle the next method. """
+        """
+        Handle a successful registration to the auth server.
+        @param client_socket: The client's socket.
+        @param request: The request.
+        @return: The request, after (potentially) modifying its payload for
+        further processing.
+        """
         self.logger.info(f"Successfully registered to auth server with "
                          f"request: {request}")
         if not self.client_id:
@@ -78,6 +102,13 @@ class AuthProtocolHandler(BaseProtocol):
     @BaseProtocol.register_request(AuthResponseCodes.REGISTRATION_FAILED)
     def _handle_registration_failure(self, client_socket: socket,
                                      request: Request) -> Request:
+        """
+        Handle a failed registration to the auth server.
+        @param client_socket: The client's socket.
+        @param request: The request.
+        @return: The request, after (potentially) modifying its payload for
+        further processing.
+        """
         self.logger.error(f"Failed to register to auth server with "
                           f"request: {request}")
         return request
@@ -85,6 +116,13 @@ class AuthProtocolHandler(BaseProtocol):
     @BaseProtocol.register_request(AuthResponseCodes.SERVERS_LIST)
     def _handle_servers_list(self, client_socket: socket,
                              request: Request) -> Request:
+        """
+        Handle a list of servers received from the auth server.
+        @param client_socket: The client's socket.
+        @param request: The request.
+        @return: The request, after (potentially) modifying its payload for
+        further processing.
+        """
         self.logger.info(f"Successfully received servers list from auth "
                          f"server...")
         servers = Server.bytes_to_servers(payload=request.payload,
@@ -97,6 +135,16 @@ class AuthProtocolHandler(BaseProtocol):
     @BaseProtocol.register_request(AuthResponseCodes.AES_KEY)
     def _handle_get_aes_key(self, client_socket: socket,
                             request: Request) -> Request:
+        """
+        Handles the AES key retrieval request by decrypting the encrypted key
+        and ticket from the request payload. Validates the client ID and nonce
+        in the process. Modifies the request payload with the decrypted
+        authenticator and encrypted ticket for further processing.
+        @param client_socket: The client's socket.
+        @param request: The request.
+        @return: The request, after (potentially) modifying its payload for
+        further processing.
+        """
         client_bytes = request.payload[0:16]
         encrypted_key_bytes = request.payload[16:112]
         encrypted_ticket_bytes = request.payload[112:]
@@ -138,6 +186,13 @@ class AuthProtocolHandler(BaseProtocol):
         MessagesServerResponseCodes.AUTHENTICATE_SUCCESS)
     def _handle_success_msg_server_auth(self, client_socket: socket,
                                         request: Request) -> Request:
+        """
+        Handle a successful authentication with the Messages Server.
+        @param client_socket: The client's socket.
+        @param request: The request.
+        @return: The request, after (potentially) modifying its payload for
+        further processing.
+        """
         self.logger.info(
             "Managed to successfully authenticate with Messages Server.")
         return request
@@ -146,6 +201,13 @@ class AuthProtocolHandler(BaseProtocol):
         MessagesServerResponseCodes.SEND_MESSAGE_SUCCESS)
     def _handle_success_msg_server_auth(self, client_socket: socket,
                                         request: Request) -> Request:
+        """
+        Handle a successful message sent to the Messages Server.
+        @param client_socket: The client's socket.
+        @param request: The request.
+        @return: The request, after (potentially) modifying its payload for
+        further processing.
+        """
         self.logger.info("Managed to successfully send a message to the "
                          "Messages Server and received a valid response.")
         return request
@@ -154,6 +216,13 @@ class AuthProtocolHandler(BaseProtocol):
         MessagesServerResponseCodes.GENERAL_ERROR)
     def _handle_error_msg_server(self, client_socket: socket,
                                  request: Request) -> Request:
+        """
+        Handle a general error from the Messages Server.
+        @param client_socket: The client's socket.
+        @param request: The request.
+        @return: The request, after (potentially) modifying its payload for
+        further processing.
+        """
         self.logger.error(f"Received invalid status from messages server for"
                           f"the last request. Error - "
                           f"{request.payload.decode('utf-8')}")

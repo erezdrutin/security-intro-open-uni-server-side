@@ -1,3 +1,9 @@
+"""
+Author: Erez Drutin
+Date: 11.03.2024
+Purpose: Hold a bunch of constant variables which will be used by the
+messages' server.
+"""
 from common.consts import *
 from server_common.consts import *
 

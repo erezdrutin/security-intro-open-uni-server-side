@@ -1,8 +1,13 @@
+"""
+Author: Erez Drutin
+Date: 11.03.2024
+Purpose: Define the overall structure of a client.
+"""
 from __future__ import annotations
 import logging
 import socket
 from typing import List, Any, Dict, Tuple, Optional
-from client_side.auth_protocol_handler import AuthProtocolHandler
+from client_side.protocol_handler import ProtocolHandler
 from client_side.consts import RequestCodeTypes, AuthRequestCodes, \
     MessagesServerRequestCodes, CLIENT_VERSION
 from client_side.requests import RequestFactory
@@ -14,12 +19,25 @@ from common.models import Request, Server, ClientMessage
 
 class Client:
     def __init__(self, server_port: int, server_ip: str, client_name: str,
-                 client_id: bytes, protocol: AuthProtocolHandler,
+                 client_id: bytes, protocol: ProtocolHandler,
                  client_password: str, logger: logging.Logger,
                  actions: List[RequestCodeTypes]):
+        """
+        Initializes the client with the server connection details,
+        authentication information, and logger.
+        @param server_port: The port number of the server to connect to.
+        @param server_ip: The IP address of the server to connect to.
+        @param client_name: The name of the client.
+        @param client_id: A unique identifier for the client, in bytes.
+        @param protocol: A ProtocolHandler instance.
+        @param client_password: The password of the client for authentication.
+        @param logger: A logging.Logger instance for logging messages.
+        @param actions: A list of RequestCodeTypes detailing the actions the
+        client intends to perform.
+        """
         self.server_port = server_port
         self.server_ip = server_ip
-        self.protocol: AuthProtocolHandler = protocol
+        self.protocol: ProtocolHandler = protocol
         self.logger = logger
         self.client_id = client_id
         self.client_name = client_name
@@ -34,7 +52,12 @@ class Client:
 
     def _prepare_request(self, action: RequestCodeTypes,
                          request: Optional[Request]) -> Dict[str, Any]:
-        """ Prepares the kwargs dict based on the action to perform. """
+        """
+        Prepares the request dictionary to be sent based on the action.
+        @param action: an action to be performed, based on the RequestCodeType.
+        @param request: An optional Request to include during request prep.
+        @return: A dictionary with the prepared request data.
+        """
         data = {}
         if action == AuthRequestCodes.GET_AES_KEY:
             data['server_id'] = self.server_id
@@ -61,9 +84,12 @@ class Client:
     def _handle_request(self, action: RequestCodeTypes,
                         last_request: Optional[Request]) -> Any:
         """
-        Handles communication with a single server until we either receive
-        an error, the server side disconnects or we finished our
-        "connection" with the server.
+        Handles the process of sending a request to the server and receiving
+        a response.
+        @param action: The action to be performed based on the RequestCodeType.
+        @param last_request: The last request sent to the server, used for
+        context (if necessary).
+        @return: The response from the server.
         """
         # Perform a request using the client socket:
         kwargs = self._prepare_request(action=action, request=last_request)
@@ -81,6 +107,11 @@ class Client:
 
     def _parse_incoming_requests_results(self, action: RequestCodeTypes,
                                          request: Request) -> None:
+        """
+        Parses the results of incoming requests based on the action performed.
+        @param action: The requested action, based on the RequestCodeType.
+        @param request: The request object that was sent to the server.
+        """
         if action == AuthRequestCodes.CLIENT_REGISTRATION and \
                 not self.client_id:
             # Update client id for all relevant dependencies:
@@ -97,9 +128,8 @@ class Client:
 
     def start(self) -> None:
         """
-        Starts the client side based on the received parameters. Will send
-        the initially received request to the server and manage the ongoing
-        flow of request-responses communication with the server.
+        Initiates the client's action sequence, managing the connection to
+        the server and handling request-response flows.
         """
         # Initialize a new socket and connect to it:
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -127,14 +157,10 @@ class Client:
     def init_logger(logger_name: str = "main", log_path: str = "logs.log") \
             -> logging.Logger:
         """
-        A static method to initialize a logger, so we can use it throughout
-        our messages_server code (or other code-parts in the future if relevant).
-        This is a very basic implementation, in a real-world app the logger
-        would be implemented with a FileRotator and a bit of a more
-        "comprehensive" configuration.
-        @param logger_name: A default name for the logger.
-        @param log_path: A path to store inside logs from the app.
-        @return: A python logger.
+        Initializes and returns a logger instance for logging messages.
+        @param logger_name: The name for the logger instance.
+        @param log_path: The file path where the log messages will be stored.
+        @return: A configured logging.Logger instance.
         """
         logging.basicConfig(
             level=logging.INFO,
@@ -149,8 +175,12 @@ class Client:
     def fetch_client_details(me_path: str, logger: logging.Logger) \
             -> Tuple[str, Optional[bytes], str]:
         """
-        Loads client details from a file or prompts the user if the file path is empty.
-        Returns the client name and client_id (as bytes or None).
+        Fetches client details from a specified file path or prompts the user
+        for input if the file path is empty.
+        @param me_path: The file path to load client details from.
+        @param logger: A logging.Logger instance for logging messages.
+        @return: A tuple containing the client name, client_id (/None) and
+        client password.
         """
         if me_path:
             try:
@@ -174,18 +204,12 @@ class Client:
     def initialize_client(actions: List[RequestCodeTypes],
                           auth_server_path: str, me_path: str = '') -> Client:
         """
-        Returns a Server instance. In general, a lot of the data here could
-        be further simplified into "injection" via main (for example,
-        rather than passing paths and consts, we can pass DBHandler,
-        ProtocolHandler, ...), but this feels out of scope for this project.
-        @param actions: A list of actions to perform via the client. Assumes
-        the list is sequential in the sense that these actions will take
-        place one right after the other.
-        @param me_path: An (optional) path to a file in which we store
-        details about the client_side.
-        @param auth_server_path: A path to the file in which we store details
-        about the Authentication server.
-        @return: A messages_server instance.
+        Initializes and returns a client instance with the specified config.
+        @param actions: A list of actions the client will perform.
+        @param me_path: An optional file path for storing client details.
+        @param auth_server_path: The file path containing authentication
+        server details.
+        @return: An initialized Client instance.
         """
         logger = Client.init_logger()
         try:
@@ -199,10 +223,10 @@ class Client:
                 f'server configuration. Error: {err}')
             raise err
 
-        protocol = AuthProtocolHandler(logger=logger,
-                                       client_id=client_id_bytes,
-                                       client_key=password,
-                                       client_name=name)
+        protocol = ProtocolHandler(logger=logger,
+                                   client_id=client_id_bytes,
+                                   client_key=password,
+                                   client_name=name)
 
         return Client(server_port=int(port), server_ip=server_ip,
                       protocol=protocol, client_password=password,

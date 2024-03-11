@@ -1,25 +1,32 @@
+"""
+Author: Erez Drutin
+Date: 11.03.2024
+Purpose: Act as the protocol used by the messages' server to communicate
+with the different clients. The protocol defines how the messages' server is
+expected to behave based on different request codes passed by the clients.
+"""
 import logging
 import socket
-from base64 import b64encode, b64decode
-from datetime import datetime, timedelta
 from typing import Any, Dict
-from hashlib import sha256
-from uuid import uuid4
 from messages_server.consts import SERVER_VERSION, RequestCodes, ResponseCodes
 from common.aes_cipher import AESCipher
 from common.consts import MessagesServerRequestCodes
 from common.db_handler import DatabaseHandler
-from common.models import Request, Response, Client, Server, EncryptedKey, \
-    EncryptedTicket, DecryptedTicket, DecryptedKey, DecryptedAuthenticator, \
-    EncryptedAuthenticator, ClientMessage
+from common.models import Request, Response, Server, EncryptedTicket, \
+    DecryptedTicket, DecryptedAuthenticator, ClientMessage
 from common.base_protocol import BaseProtocol
 from common.message_utils import unpack_client_message_headers, unpack_message
-from common.utils import enforce_len, dt_with_ttl_to_ts
 
 
 class ProtocolHandler(BaseProtocol):
     def __init__(self, db_handler: DatabaseHandler, logger: logging.Logger,
                  server: Server):
+        """
+        Initializes a new instance of the ProtocolHandler class.
+        @param db_handler: A DatabaseHandler instance.
+        @param logger: A Logger instance.
+        @param server: A Server instance.
+        """
         super().__init__(logger=logger, version=SERVER_VERSION)
         self.db_handler = db_handler
         self.server = server
@@ -29,6 +36,7 @@ class ProtocolHandler(BaseProtocol):
         """
         Handles an incoming request from client side.
         @param client_socket: A socket we can pass messages through.
+        @param kwargs: Additional arguments.
         @return: Returns the result of the handler's execution.
         """
         client_id, version, code, payload_size = unpack_client_message_headers(
@@ -45,6 +53,16 @@ class ProtocolHandler(BaseProtocol):
     @BaseProtocol.register_request(RequestCodes.AUTHENTICATE)
     def _handle_client_authentication(self, client_socket: socket.socket,
                                       request: Request) -> None:
+        """
+        Processes the client authentication by validating the authenticator
+        and ticket provided in the request. Decrypts the ticket and
+        authenticator, validates the creation time, client ID, server ID, and
+        version. Sends a success response if valid, otherwise error response.
+        @param client_socket: The socket through which communication with
+        the client occurs.
+        @param request: The authentication request containing the
+        authenticator and ticket.
+        """
         # Extract authenticator / ticket from request:
         authenticator_bytes = request.payload[0:112]
         ticket_bytes = request.payload[112:]
@@ -61,7 +79,8 @@ class ProtocolHandler(BaseProtocol):
 
         # Decrypt authenticator from request:
         authenticator = DecryptedAuthenticator.from_bytes(
-            data=authenticator_bytes, aes_key=ticket.decrypted_aes_key.decode())
+            data=authenticator_bytes,
+            aes_key=ticket.decrypted_aes_key.decode())
         self.logger.debug(f"successfully decrypted auth: {authenticator}")
 
         # Handle invalid ticket-authenticator combination:
@@ -91,6 +110,15 @@ class ProtocolHandler(BaseProtocol):
     @BaseProtocol.register_request(RequestCodes.SEND_MESSAGE)
     def _handle_client_message(self, client_socket: socket.socket,
                                request: Request) -> None:
+        """
+        Handles incoming messages from clients. Decrypts the client message
+        using the AES key stored in the ticket cache. Logs the message content
+        and sends a success response if the message was successfully decrypted
+        and interpreted, or an error response if any issues arise during
+        decryption or interpretation.
+        @param client_socket: The socket for communication with the client.
+        @param request: The request containing the encrypted client message.
+        """
         try:
             message = ClientMessage.from_bytes(
                 data=request.payload,

@@ -1,3 +1,8 @@
+"""
+Author: Erez Drutin
+Date: 11.03.2024
+Purpose: Define the overall structure of an authentication server.
+"""
 from __future__ import annotations
 import logging
 import socket
@@ -15,6 +20,15 @@ class Server:
     def __init__(self, port: int, db_handler: DatabaseHandler,
                  state: ServerState, protocol: ProtocolHandler,
                  logger: logging.Logger):
+        """
+        Initializes the server with the specified port, database handler,
+        server state, protocol handler, and logger.
+        @param port: The port on which the server will listen for connections.
+        @param db_handler: A DatabaseHandler for interacting with the DB.
+        @param state: A ServerState representing the state of the server.
+        @param protocol: A ProtocolHandler for handling incoming messages.
+        @param logger: A logging.Logger object for logging messages.
+        """
         self.port = port
         self.db_handler = db_handler
         self.server_socket = None
@@ -24,10 +38,10 @@ class Server:
 
     def _handle_client(self, client_socket: socket.socket) -> None:
         """
-        Handles communication with a single client_side until we either receive
-        an error or the client_side disconnects.
-        @param client_socket: A socket to read messages from.
-        @return:
+        Manages communication with a connected client until disconnection
+        or an error occurs.
+        @param client_socket: The client's socket connection to read messages
+        from and send responses to.
         """
         try:
             while True:
@@ -49,11 +63,9 @@ class Server:
 
     def start(self) -> None:
         """
-        Starts the messages_server, allowing it to accept connections on self.port.
-        The binding to 0.0.0.0 binds the messages_server to current hostname. The
-        method sets up the messages_server socket and listens for incoming
-        connections. For each new connection, it logs the event and starts a
-        new thread for client_side handling. This is an endless method.
+        Initiates the server to start accepting client connections on the
+        configured port. This method sets up the server socket and listens for
+        incoming connections indefinitely, creating a thread for each client.
         """
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind(('0.0.0.0', self.port))
@@ -73,14 +85,10 @@ class Server:
     def init_logger(logger_name: str = "main", log_path: str = "logs.log") \
             -> logging.Logger:
         """
-        A static method to initialize a logger, so we can use it throughout
-        our messages_server code (or other code-parts in the future if relevant).
-        This is a very basic implementation, in a real-world app the logger
-        would be implemented with a FileRotator and a bit of a more
-        "comprehensive" configuration.
-        @param logger_name: A default name for the logger.
-        @param log_path: A path to store inside logs from the app.
-        @return: A python logger.
+        Initializes and returns a configured logger.
+        @param logger_name: The name of the logger.
+        @param log_path: The file path to save the log file.
+        @return: A configured logging.Logger object.
         """
         logging.basicConfig(
             level=logging.DEBUG,
@@ -96,16 +104,14 @@ class Server:
             db_config: Dict[str, Dict[str, Any]], db_file: str,
             port_path: str, client_tbl: str, servers_tbl: str) -> Server:
         """
-        Returns a Server instance. In general, a lot of the data here could
-        be further simplified into "injection" via main (for example,
-        rather than passing paths and consts, we can pass DBHandler,
-        ProtocolHandler, ...), but this feels out of scope for this project.
-        @param db_config: Configuration for the DB to run the messages_server with.
-        @param db_file: A DB file to store results in.
-        @param port_path: A path to the file in which we store port details.
-        @param client_tbl: The table in which we will store "clients".
-        @param servers_tbl: The table in which we will store "servers".
-        @return: A messages_server instance.
+        Creates and returns a server instance configured with a database,
+        logger, and server state.
+        @param db_config: Database configuration details.
+        @param db_file: Path to the database file.
+        @param port_path: Path to the file containing the port configuration.
+        @param client_tbl: Name of the table for client information in the DB.
+        @param servers_tbl: Name of the table for server information in the DB.
+        @return: An instance of the configured Server.
         """
         logger = Server.init_logger()
         port_config_loader = FileHandler(port_path, logger=logger)
