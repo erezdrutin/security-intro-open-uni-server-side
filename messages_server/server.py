@@ -11,7 +11,7 @@ from typing import Dict, Any
 from common.consts import AuthRequestCodes
 from common.models import Server as ServerModel
 from common.custom_exceptions import ClientDisconnectedError
-from common.db_handler import DatabaseHandler
+from server_common.db_handler import DatabaseHandler
 from messages_server.protocol_handler import ProtocolHandler
 
 

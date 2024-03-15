@@ -15,7 +15,7 @@ from auth_server.consts import SERVER_VERSION, RequestCodes, ResponseCodes, \
     TICKET_TTL_SEC
 from common.aes_cipher import AESCipher
 from common.consts import AuthRequestCodes
-from common.db_handler import DatabaseHandler
+from server_common.db_handler import DatabaseHandler
 from common.models import Request, Response, Client, Server, EncryptedKey, \
     EncryptedTicket
 from common.base_protocol import BaseProtocol

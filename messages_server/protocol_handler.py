@@ -11,7 +11,7 @@ from typing import Any, Dict
 from messages_server.consts import SERVER_VERSION, RequestCodes, ResponseCodes
 from common.aes_cipher import AESCipher
 from common.consts import MessagesServerRequestCodes
-from common.db_handler import DatabaseHandler
+from server_common.db_handler import DatabaseHandler
 from common.models import Request, Response, Server, EncryptedTicket, \
     DecryptedTicket, DecryptedAuthenticator, ClientMessage
 from common.base_protocol import BaseProtocol
