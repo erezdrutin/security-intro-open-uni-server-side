@@ -87,7 +87,7 @@ class RequestFactory:
         padded_name = enforce_len(server_name.encode('utf-8'), 255)
         padded_aes = enforce_len(AESCipher.create_aes_key().encode('utf-8'),
                                  32)
-        ip_bytes = inet_aton('0.0.0.0')
+        ip_bytes = inet_aton('localhost')
         port_bytes = randint(1000, 9999).to_bytes(2, byteorder='big')
         payload = padded_name + padded_aes + ip_bytes + port_bytes
         return Request(

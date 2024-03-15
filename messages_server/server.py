@@ -63,7 +63,7 @@ class Server:
         incoming connections indefinitely, creating a thread for each client.
         """
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind(('0.0.0.0', self.server.port))
+        self.server_socket.bind(('localhost', self.server.port))
         # Queuing up to 5 requests at a time:
         self.server_socket.listen(5)
         self.logger.info(
