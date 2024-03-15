@@ -13,7 +13,6 @@ from the actual required methods using an "abstract" class as an interface.
 import logging
 from socket import socket
 from typing import Callable, Dict, Type, Any
-from common.message_utils import unpack_client_message_headers, unpack_message
 from common.models import Request, Response
 from common.consts import AuthRequestCodes, MessagesServerRequestCodes
 from abc import ABC, abstractmethod

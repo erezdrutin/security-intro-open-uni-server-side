@@ -219,26 +219,3 @@ class DatabaseHandler:
             query=self.config[self.servers_tbl].get('get_server_by_id'),
             data_class=models.Server, id=server_id)
         return None if not len(results) else results[0]
-    # def get_aes_key_for_server(self, server_id: bytes) -> bytes:
-    #     """
-    #     Receives a client_id and returns its matching AES key. Letting the
-    #     code "crash" in case of failure.
-    #     @param server_id: A client_side id to fetch an AES key for.
-    #     @return: A bytes sequence representing the requested AES key.
-    #     """
-    #     # Selecting the first record from the first row in the results:
-    #     return self.perform_query(query=self.config[self.servers_tbl].get(
-    #         'get_server_aes'), id=server_id)[0][0]
-
-    # def update_public_key_and_aes_key(self, client_id: bytes, aes_key: bytes,
-    #                                   public_key: bytes) -> None:
-    #     """
-    #     Receives a client_id, public key and an aes_key. Updates the public
-    #     key and the aes key for the received client_id (+ last seen time).
-    #     @param client_id: A client_side id to update values for.
-    #     @param aes_key: An aes key to update.
-    #     @param public_key: A public key to update.
-    #     """
-    #     self.perform_query(query=self.config[self.client_tbl].get(
-    #         'update_public_aes'), id=client_id, public_key=public_key,
-    #         aes_key=aes_key, last_seen=datetime.now())
