@@ -198,6 +198,9 @@ class EncryptedKey(BaseKey):
     def create(shared_iv: bytes, shared_aes_key: str, nonce: bytes,
                cipher: AESCipher):
         encrypted_nonce = cipher.encrypt(nonce)
+        # Debug logging iv + encrypted nonce for easier offline attack testing:
+        logging.debug(f"IV: {shared_iv}")
+        logging.debug(f"Encrypted nonce: {encrypted_nonce}")
         client_encrypted_aes = cipher.encrypt(b64decode(shared_aes_key))
         return EncryptedKey(shared_iv=shared_iv,
                             encrypted_nonce=encrypted_nonce,

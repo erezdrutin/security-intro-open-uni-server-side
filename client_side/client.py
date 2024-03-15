@@ -154,16 +154,18 @@ class Client:
             self.logger.warning(f"Connection closed.")
 
     @staticmethod
-    def init_logger(logger_name: str = "main", log_path: str = "logs.log") \
+    def init_logger(logger_name: str = "main", log_path: str = "logs.log",
+                    logger_level: int = logging.INFO) \
             -> logging.Logger:
         """
         Initializes and returns a logger instance for logging messages.
         @param logger_name: The name for the logger instance.
         @param log_path: The file path where the log messages will be stored.
+        @param logger_level: The logging level for the logger instance.
         @return: A configured logging.Logger instance.
         """
         logging.basicConfig(
-            level=logging.INFO,
+            level=logger_level,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.FileHandler(log_path),
@@ -193,12 +195,10 @@ class Client:
                 logger.error(
                     'Unable to load client_side configuration from me_path. '
                     f'Error: {err}')
-                raise
-        else:
-            # Prompt for client name since me_path is empty
-            client_name = input("Enter client name: ")
-            client_password = input("Enter client password: ")
-            return client_name, None, client_password
+        # Prompt for client name since me_path is empty
+        client_name = input("Enter client name: ")
+        client_password = input("Enter client password: ")
+        return client_name, None, client_password
 
     @staticmethod
     def initialize_client(actions: List[RequestCodeTypes],
@@ -211,7 +211,7 @@ class Client:
         server details.
         @return: An initialized Client instance.
         """
-        logger = Client.init_logger()
+        logger = Client.init_logger(logger_level=logging.DEBUG)
         try:
             auth_server_loader = FileHandler(auth_server_path, logger=logger)
             server_ip, port = auth_server_loader.load_value().split(':')

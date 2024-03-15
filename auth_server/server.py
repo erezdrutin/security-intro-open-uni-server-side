@@ -82,16 +82,18 @@ class Server:
             client_thread.start()
 
     @staticmethod
-    def init_logger(logger_name: str = "main", log_path: str = "logs.log") \
+    def init_logger(logger_name: str = "main", log_path: str = "logs.log",
+                    logger_level: int = logging.INFO) \
             -> logging.Logger:
         """
-        Initializes and returns a configured logger.
-        @param logger_name: The name of the logger.
-        @param log_path: The file path to save the log file.
-        @return: A configured logging.Logger object.
+        Initializes and returns a logger instance for logging messages.
+        @param logger_name: The name for the logger instance.
+        @param log_path: The file path where the log messages will be stored.
+        @param logger_level: The logging level for the logger instance.
+        @return: A configured logging.Logger instance.
         """
         logging.basicConfig(
-            level=logging.DEBUG,
+            level=logger_level,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.FileHandler(log_path),
@@ -113,7 +115,7 @@ class Server:
         @param servers_tbl: Name of the table for server information in the DB.
         @return: An instance of the configured Server.
         """
-        logger = Server.init_logger()
+        logger = Server.init_logger(logger_level=logging.DEBUG)
         port_config_loader = FileHandler(port_path, logger=logger)
         port = int(port_config_loader.load_value(default_value=DEFAULT_PORT))
 

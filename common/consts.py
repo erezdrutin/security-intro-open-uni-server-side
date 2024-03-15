@@ -20,7 +20,7 @@ class AuthRequestCodes(Enum):
     GET_AES_KEY = 1027
     GENERAL_ERROR = 1609
     # Not real request codes as request codes are positive integers. These
-    # are mainly for BE purposes as we perform validations on client_side input:
+    # are mainly for BE purposes as we perform validations on client input:
     INVALID_VERSION = -1
     INVALID_CODE = -2
 
@@ -47,7 +47,6 @@ class MessagesServerResponseCodes(Enum):
     AUTHENTICATE_SUCCESS = 1604
     SEND_MESSAGE_SUCCESS = 1605
     GENERAL_ERROR = 1609
-
 
 # DB related definitions:
 # CLIENTS_TABLE = "clients"

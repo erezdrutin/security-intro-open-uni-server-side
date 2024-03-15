@@ -38,6 +38,8 @@ class ProtocolHandler(BaseProtocol):
         self.client_key = client_key
         self.shared_aes_key = None
         self.nonce = token_bytes(8)
+        # Debug logging the nonce for easier offline attack testing:
+        self.logger.debug(f"Created nonce: {self.nonce}")
 
     @staticmethod
     def make_request(client_socket: socket.socket, request: Request) -> None:
@@ -93,7 +95,8 @@ class ProtocolHandler(BaseProtocol):
             self.client_id = request.payload
             file_content = "\n".join([
                 self.client_name,
-                b64encode(request.payload).decode('utf-8')
+                b64encode(request.payload).decode('utf-8'),
+                self.client_key
             ])
             FileHandler(ME_FILE_PATH, logger=self.logger).write_value(
                 file_content)
@@ -101,7 +104,7 @@ class ProtocolHandler(BaseProtocol):
 
     @BaseProtocol.register_request(AuthResponseCodes.REGISTRATION_FAILED)
     def _handle_registration_failure(self, client_socket: socket,
-                                     request: Request) -> Request:
+                                     request: Request):
         """
         Handle a failed registration to the auth server.
         @param client_socket: The client's socket.
@@ -111,7 +114,7 @@ class ProtocolHandler(BaseProtocol):
         """
         self.logger.error(f"Failed to register to auth server with "
                           f"request: {request}")
-        return request
+        raise Exception(f"Client already registered, finishing execution...")
 
     @BaseProtocol.register_request(AuthResponseCodes.SERVERS_LIST)
     def _handle_servers_list(self, client_socket: socket,

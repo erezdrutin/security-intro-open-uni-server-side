@@ -11,4 +11,4 @@ from server_common.consts import *
 RequestCodes = MessagesServerRequestCodes
 ResponseCodes = MessagesServerResponseCodes
 
-MSG_SERVER_ID = b'\xefZM?\xdbrO\x7f\x8e\xe0\x80)\x8d\xbf\xf5z'
+MSG_SERVER_ID = b'\xe3EW\x17*\xccK\xd4\xa5\x88\xf5Y\xf8@E\x84'

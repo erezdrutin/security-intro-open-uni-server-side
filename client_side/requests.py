@@ -83,7 +83,8 @@ class RequestFactory:
         @param kwargs: Additional arguments to pass to the request.
         @return: A constructed Request.
         """
-        padded_name = enforce_len(self.client_name.encode('utf-8'), 255)
+        server_name = input("Enter a server name to register: ")
+        padded_name = enforce_len(server_name.encode('utf-8'), 255)
         padded_aes = enforce_len(AESCipher.create_aes_key().encode('utf-8'),
                                  32)
         ip_bytes = inet_aton('0.0.0.0')
